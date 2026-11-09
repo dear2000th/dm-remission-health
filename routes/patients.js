@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../database');
 const { verifyToken, requireRole, checkPatientAccess } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
+const { getFirestore, isFirestoreReady } = require('../firebase');
 
 // GET /api/patients - List & Search patients by Citizen ID, HN, or Full Name
 router.get('/', verifyToken, (req, res) => {
@@ -167,6 +168,33 @@ router.post('/', verifyToken, requireRole(['admin', 'doctor', 'nurse']), (req, r
     details: { full_name, citizen_id: cleanCitizenId, initial_hba1c }
   });
 
+  // Sync new patient to Cloud Firestore
+  if (isFirestoreReady()) {
+    try {
+      const fsDb = getFirestore();
+      if (fsDb) {
+        fsDb.collection('patients').doc(String(newPatientId)).set({
+          id: newPatientId,
+          hn: hn.trim(),
+          citizen_id: cleanCitizenId,
+          full_name: full_name.trim(),
+          gender: gender || 'M',
+          birth_date: birth_date || null,
+          age: age ? parseInt(age) : null,
+          initial_weight_kg: initial_weight_kg ? parseFloat(initial_weight_kg) : null,
+          target_weight_kg: target_weight_kg ? parseFloat(target_weight_kg) : null,
+          initial_hba1c: initial_hba1c ? parseFloat(initial_hba1c) : null,
+          program_start_date: program_start_date || new Date().toISOString().split('T')[0],
+          status: 'active',
+          notes: notes ? notes.trim() : '',
+          created_at: new Date().toISOString()
+        }, { merge: true }).catch(err => console.warn('Firestore patient sync warning:', err.message));
+      }
+    } catch (fsErr) {
+      console.warn('Firestore patient sync error:', fsErr.message);
+    }
+  }
+
   res.status(201).json({
     message: 'ลงทะเบียนผู้ป่วยเข้าสู่โครงการ DM Remission เรียบร้อยแล้ว',
     patientId: newPatientId
@@ -272,6 +300,31 @@ router.put('/:id', verifyToken, requireRole(['admin', 'doctor', 'nurse']), (req,
     details: req.body
   });
 
+  // Sync updated patient to Cloud Firestore
+  if (isFirestoreReady()) {
+    try {
+      const fsDb = getFirestore();
+      if (fsDb) {
+        fsDb.collection('patients').doc(String(patientId)).set({
+          hn: cleanHn,
+          citizen_id: cleanCitizenId,
+          full_name: full_name ? full_name.trim() : patient.full_name,
+          gender: gender || patient.gender,
+          age: age !== undefined && age !== '' ? parseInt(age) : patient.age,
+          initial_weight_kg: initial_weight_kg !== undefined && initial_weight_kg !== '' ? parseFloat(initial_weight_kg) : patient.initial_weight_kg,
+          target_weight_kg: target_weight_kg !== undefined && target_weight_kg !== '' ? parseFloat(target_weight_kg) : patient.target_weight_kg,
+          initial_hba1c: initial_hba1c !== undefined && initial_hba1c !== '' ? parseFloat(initial_hba1c) : patient.initial_hba1c,
+          program_start_date: program_start_date || patient.program_start_date,
+          status: status || patient.status,
+          notes: notes !== undefined ? notes : patient.notes,
+          updated_at: new Date().toISOString()
+        }, { merge: true }).catch(err => console.warn('Firestore patient update warning:', err.message));
+      }
+    } catch (fsErr) {
+      console.warn('Firestore patient update error:', fsErr.message);
+    }
+  }
+
   res.json({ message: 'ปรับปรุงข้อมูลผู้ป่วยเรียบร้อยแล้ว' });
 });
 
@@ -305,6 +358,24 @@ router.delete('/:id', verifyToken, requireRole(['admin', 'doctor']), (req, res) 
       deleted_records_count: recInfo.changes
     }
   });
+
+  // Sync patient deletion to Cloud Firestore
+  if (isFirestoreReady()) {
+    try {
+      const fsDb = getFirestore();
+      if (fsDb) {
+        (async () => {
+          const recSnap = await fsDb.collection('patients').doc(String(patientId)).collection('health_records').get();
+          const batch = fsDb.batch();
+          recSnap.forEach(d => batch.delete(d.ref));
+          batch.delete(fsDb.collection('patients').doc(String(patientId)));
+          await batch.commit();
+        })().catch(err => console.warn('Firestore patient delete warning:', err.message));
+      }
+    } catch (fsErr) {
+      console.warn('Firestore patient delete error:', fsErr.message);
+    }
+  }
 
   res.json({
     message: `ลบข้อมูลผู้ป่วย ${patient.full_name} (${patient.hn}) และประวัติบันทึกสุขภาพ ${recInfo.changes} รายการเรียบร้อยแล้ว`

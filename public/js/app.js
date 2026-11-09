@@ -844,6 +844,7 @@ const App = (function () {
       patientsList = data.patients || [];
 
       const select = $('patient-select');
+      const previouslySelected = select.value ? parseInt(select.value) : null;
       select.innerHTML = '';
       patientsList.forEach(p => {
         const opt = document.createElement('option');
@@ -853,7 +854,8 @@ const App = (function () {
       });
 
       if (patientsList.length > 0) {
-        const selectedId = (currentUser.patient && currentUser.patient.id) || patientsList[0].id;
+        const patientExists = previouslySelected && patientsList.some(p => p.id === previouslySelected);
+        const selectedId = patientExists ? previouslySelected : ((currentUser.patient && currentUser.patient.id) || patientsList[0].id);
         select.value = selectedId;
         await loadPatientData(selectedId);
       }

@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const { db } = require('../database');
 const { verifyToken, requireRole } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
+const { getFirestore, isFirestoreReady } = require('../firebase');
 
 // All endpoints in this router require ADMIN role
 router.use(verifyToken, requireRole(['admin']));
@@ -120,6 +121,27 @@ router.post('/', (req, res) => {
     details: { created_username: cleanUsername, role, full_name }
   });
 
+  // Sync user to Cloud Firestore
+  if (isFirestoreReady()) {
+    try {
+      const fsDb = getFirestore();
+      if (fsDb) {
+        fsDb.collection('users').doc(cleanUsername.toLowerCase()).set({
+          id: newUserId,
+          username: cleanUsername,
+          role,
+          full_name: full_name.trim(),
+          email: email ? email.trim() : '',
+          failed_attempts: 0,
+          locked_until: null,
+          created_at: new Date().toISOString()
+        }, { merge: true }).catch(err => console.warn('Firestore user sync warning:', err.message));
+      }
+    } catch (fsErr) {
+      console.warn('Firestore user sync error:', fsErr.message);
+    }
+  }
+
   res.status(201).json({
     message: `สร้างผู้ใช้งาน "${cleanUsername}" เรียบร้อยแล้ว`,
     userId: newUserId
@@ -200,6 +222,23 @@ router.put('/:id', (req, res) => {
     }
   });
 
+  // Sync user update to Cloud Firestore
+  if (isFirestoreReady()) {
+    try {
+      const fsDb = getFirestore();
+      if (fsDb) {
+        fsDb.collection('users').doc(user.username.toLowerCase()).set({
+          full_name: full_name ? full_name.trim() : user.full_name,
+          email: email !== undefined ? (email ? email.trim() : '') : (user.email || ''),
+          role: newRole,
+          updated_at: new Date().toISOString()
+        }, { merge: true }).catch(err => console.warn('Firestore user update warning:', err.message));
+      }
+    } catch (fsErr) {
+      console.warn('Firestore user update error:', fsErr.message);
+    }
+  }
+
   res.json({ message: `ปรับปรุงข้อมูลผู้ใช้งาน "${user.username}" เรียบร้อยแล้ว` });
 });
 
@@ -233,6 +272,19 @@ router.delete('/:id', (req, res) => {
     userAgent: req.headers['user-agent'],
     details: { deleted_username: user.username, role: user.role, full_name: user.full_name }
   });
+
+  // Sync user deletion to Cloud Firestore
+  if (isFirestoreReady()) {
+    try {
+      const fsDb = getFirestore();
+      if (fsDb) {
+        fsDb.collection('users').doc(user.username.toLowerCase()).delete()
+          .catch(err => console.warn('Firestore user delete warning:', err.message));
+      }
+    } catch (fsErr) {
+      console.warn('Firestore user delete error:', fsErr.message);
+    }
+  }
 
   res.json({ message: `ลบผู้ใช้งาน "${user.username}" เรียบร้อยแล้ว` });
 });

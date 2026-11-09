@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../database');
 const { verifyToken, checkPatientAccess } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
+const { getFirestore, isFirestoreReady } = require('../firebase');
 
 // GET /api/patients/:id/records - Get health records
 router.get('/:id/records', verifyToken, checkPatientAccess, (req, res) => {
@@ -135,6 +136,34 @@ router.post('/:id/records', verifyToken, checkPatientAccess, (req, res) => {
     userAgent: req.headers['user-agent'],
     details: { week: weekNum, day: dayNum, sys: cleanSys, dia: cleanDia, fbs: cleanG1Pre }
   });
+
+  // Sync health record to Cloud Firestore
+  if (isFirestoreReady()) {
+    try {
+      const fsDb = getFirestore();
+      if (fsDb) {
+        fsDb.collection('patients').doc(String(patientId))
+          .collection('health_records').doc(`w${weekNum}_d${dayNum}`)
+          .set({
+            patient_id: patientId,
+            week_number: weekNum,
+            day_of_week: dayNum,
+            record_date: record_date || new Date().toISOString().split('T')[0],
+            bp_systolic: cleanSys !== null ? cleanSys : null,
+            bp_diastolic: cleanDia !== null ? cleanDia : null,
+            glucose_first_meal_pre: cleanG1Pre !== null ? cleanG1Pre : null,
+            glucose_first_meal_post: cleanG1Post !== null ? cleanG1Post : null,
+            glucose_last_meal_pre: cleanG2Pre !== null ? cleanG2Pre : null,
+            glucose_last_meal_post: cleanG2Post !== null ? cleanG2Post : null,
+            step_count: cleanSteps !== null ? parseInt(cleanSteps) : null,
+            notes: notes ? notes.trim() : '',
+            updated_at: new Date().toISOString()
+          }, { merge: true }).catch(err => console.warn('Firestore record sync warning:', err.message));
+      }
+    } catch (fsErr) {
+      console.warn('Firestore record sync error:', fsErr.message);
+    }
+  }
 
   res.json({
     message: `บันทึกข้อมูลสุขภาพ สัปดาห์ที่ ${weekNum} วันที่ ${dayNum} เรียบร้อยแล้ว`,

@@ -723,6 +723,40 @@ const API = (function () {
 
     async getUsers(q = '') {
       let users = getStored('users', SEED_USERS);
+
+      if (firestoreDb) {
+        try {
+          const snap = await firestoreDb.collection('users').get();
+          if (!snap.empty) {
+            const liveUsers = [];
+            snap.forEach(doc => {
+              const u = doc.data();
+              liveUsers.push({
+                id: u.id || doc.id,
+                username: u.username || doc.id,
+                role: u.role || 'doctor',
+                full_name: u.full_name || u.username,
+                email: u.email || '',
+                failed_attempts: u.failed_attempts || 0,
+                locked_until: u.locked_until || null,
+                created_at: u.created_at || new Date().toISOString()
+              });
+            });
+            liveUsers.forEach(lu => {
+              const idx = users.findIndex(u => u.username.toLowerCase() === lu.username.toLowerCase());
+              if (idx !== -1) {
+                users[idx] = { ...users[idx], ...lu };
+              } else {
+                users.push(lu);
+              }
+            });
+            setStored('users', users);
+          }
+        } catch (e) {
+          console.warn('Firestore getUsers notice:', e.message);
+        }
+      }
+
       if (q && q.trim()) {
         const query = q.trim().toLowerCase();
         users = users.filter(u =>
@@ -754,14 +788,16 @@ const API = (function () {
 
     async createUser(data) {
       const users = getStored('users', SEED_USERS);
-      if (users.some(u => u.username.toLowerCase() === data.username.trim().toLowerCase())) {
+      const cleanUsername = data.username.trim();
+      const lowerUsername = cleanUsername.toLowerCase();
+      if (users.some(u => u.username.toLowerCase() === lowerUsername)) {
         throw new Error('ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว');
       }
-      const newId = users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 1;
+      const newId = users.length > 0 ? Math.max(...users.map(u => Number(u.id) || 0)) + 1 : 1;
       const newUser = {
         id: newId,
-        username: data.username.trim(),
-        password: data.password,
+        username: cleanUsername,
+        password: data.password || 'User@123456',
         role: data.role || 'doctor',
         full_name: data.full_name.trim(),
         email: data.email ? data.email.trim() : '',
@@ -772,30 +808,48 @@ const API = (function () {
 
       if (firestoreDb) {
         try {
-          await firestoreDb.collection('users').doc(newUser.username).set(newUser);
+          await firestoreDb.collection('users').doc(lowerUsername).set(newUser, { merge: true });
+          console.log('🔥 Cloud Firestore: Successfully saved user', lowerUsername);
+
+          await firestoreDb.collection('audit_logs').add({
+            action: 'CREATE_USER',
+            username: cleanUsername,
+            role: newUser.role,
+            full_name: newUser.full_name,
+            created_at: new Date().toISOString()
+          });
         } catch (e) {
-          console.warn('Firestore user save warning:', e.message);
+          console.error('Firestore user save error:', e);
         }
       }
 
       users.push(newUser);
       setStored('users', users);
-      return { message: 'สร้างบัญชีผู้ใช้ใหม่สำเร็จ', userId: newId };
+      return { message: `สร้างบัญชีผู้ใช้ใหม่ "${cleanUsername}" สำเร็จ และบันทึกลง Cloud Firestore เรียบร้อยแล้ว`, userId: newId };
     },
 
     async updateUser(id, data) {
       const users = getStored('users', SEED_USERS);
       const idx = users.findIndex(u => u.id === parseInt(id));
       if (idx === -1) throw new Error('ไม่พบผู้ใช้');
-      const updated = { ...users[idx], ...data, updated_at: new Date().toISOString() };
+
+      // Sanitize fields - avoid undefined
+      const cleanData = {};
+      for (const [k, v] of Object.entries(data)) {
+        if (v !== undefined) cleanData[k] = v;
+      }
+
+      const updated = { ...users[idx], ...cleanData, updated_at: new Date().toISOString() };
       users[idx] = updated;
       setStored('users', users);
 
       if (firestoreDb) {
         try {
-          await firestoreDb.collection('users').doc(updated.username).set(updated, { merge: true });
+          const lowerUsername = updated.username.toLowerCase();
+          await firestoreDb.collection('users').doc(lowerUsername).set(updated, { merge: true });
+          console.log('🔥 Cloud Firestore: Successfully updated user', lowerUsername);
         } catch (e) {
-          console.warn('Firestore user update warning:', e.message);
+          console.error('Firestore user update error:', e);
         }
       }
 
@@ -812,9 +866,11 @@ const API = (function () {
 
       if (firestoreDb && target) {
         try {
-          await firestoreDb.collection('users').doc(target.username).delete();
+          const lowerUsername = target.username.toLowerCase();
+          await firestoreDb.collection('users').doc(lowerUsername).delete();
+          console.log('🔥 Cloud Firestore: Successfully deleted user', lowerUsername);
         } catch (e) {
-          console.warn('Firestore user delete warning:', e.message);
+          console.error('Firestore user delete error:', e);
         }
       }
 
