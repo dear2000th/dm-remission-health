@@ -1,0 +1,25 @@
+{
+  "name": "dm-remission-tracker",
+  "version": "1.0.0",
+  "description": "Diabetes Mellitus Remission Tracking & Analytics Web Application with Enterprise Security",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js",
+    "seed:firestore": "node seedFirestore.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "chart.js": "^4.6.1",
+    "cors": "^2.8.5",
+    "dotenv": "^18.0.10",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "firebase-admin": "^14.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.0"
+  }
+}
