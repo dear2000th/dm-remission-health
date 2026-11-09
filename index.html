@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DM Remission Health Tracker | ระบบติดตามและวิเคราะห์ผลการดูแลเบาหวาน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Local Standalone Chart.js (Fast, 100% Offline, Zero Latency) -->
+  <script src="js/chart.umd.js"></script>
+</head>
+<body>
+
+  <!-- Top Executive Navbar -->
+  <header class="navbar">
+    <div class="nav-brand">
+      <div class="nav-brand-icon">🩺</div>
+      <div>
+        <span>DM Remission Tracker</span>
+        <div style="font-size: 0.7rem; color: var(--slate-500); font-weight: normal; line-height: 1.1;">
+          ระบบติดตามการเข้าสู่ภาวะสงบของเบาหวาน (20 สัปดาห์)
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-user" id="nav-user-area">
+      <!-- Search Box (Citizen ID / HN / Name) -->
+      <div class="search-box-wrap" id="search-box-wrap" style="display: none;">
+        <span class="search-icon-inside">🔍</span>
+        <input type="text" id="patient-search-input" class="search-input-box" placeholder="ค้นหา เลข ปชช. / HN / ชื่อ..." autocomplete="off">
+        <div class="search-results-dropdown" id="search-results-dropdown"></div>
+      </div>
+
+      <select id="patient-select" class="form-control" style="width: 200px; display: none;">
+        <!-- Populated via JS -->
+      </select>
+
+      <button id="btn-new-patient" class="btn btn-teal btn-sm" style="display: none;">
+        ➕ เพิ่มผู้ป่วยใหม่
+      </button>
+
+      <div class="user-badge" id="user-badge">
+        <span id="user-name-display">-</span>
+        <span class="role-tag" id="user-role-tag">-</span>
+      </div>
+
+      <button id="logout-btn" class="btn btn-outline btn-sm">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <!-- View 1: Executive Medical Login View -->
+  <main id="login-view" class="login-page-wrap">
+    <div class="login-dual-card">
+
+      <!-- Left Hero Showcase Panel -->
+      <div class="login-hero-panel">
+        <div class="hero-brand">
+          <div class="hero-brand-icon">🩺</div>
+          <div class="hero-brand-text">
+            <h1>DM Remission Health Cloud</h1>
+            <span>ระบบสารสนเทศทางการแพทย์เพื่อการดูแลเบาหวาน</span>
+          </div>
+        </div>
+
+        <div class="hero-content">
+          <h2 class="hero-headline">
+            ระบบติดตามและวิเคราะห์ผล<br>การเข้าสู่ภาวะสงบของเบาหวาน
+          </h2>
+          <p class="hero-subtext">
+            แพลตฟอร์มสารสนเทศระดับโรงพยาบาล สำหรับบันทึก วิเคราะห์แนวโน้มเมแทบอลิก 20 สัปดาห์ และสนับสนุนการตัดสินใจทางการแพทย์
+          </p>
+
+          <div class="hero-features">
+            <div class="hero-feature-item">
+              <div class="feature-icon-bubble">📊</div>
+              <div class="feature-text">
+                <h4>20-Week Metabolic Analytics</h4>
+                <p>คำนวณค่าเฉลี่ยความดัน ระดับน้ำตาลสะสม และดัชนี Remission อัตโนมัติ Real-time</p>
+              </div>
+            </div>
+
+            <div class="hero-feature-item">
+              <div class="feature-icon-bubble">🛡️</div>
+              <div class="feature-text">
+                <h4>Enterprise Healthcare Security</h4>
+                <p>รักษาความมั่นคงปลอดภัยข้อมูลสุขภาพตามมาตรฐาน PDPA & HIPAA พร้อมระบบ Audit Trail</p>
+              </div>
+            </div>
+
+            <div class="hero-feature-item">
+              <div class="feature-icon-bubble">👥</div>
+              <div class="feature-text">
+                <h4>Role-Based Access Control</h4>
+                <p>แยกสิทธิ์การเข้าถึงอย่างเคร่งครัดระหว่าง แพทย์ พยาบาล ผู้ดูแลระบบ และผู้ป่วย</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-footer-trust">
+          <span>🔒</span>
+          <span>Enforced with 256-Bit TLS Encryption & Role-Based Access Control</span>
+        </div>
+      </div>
+
+      <!-- Right Secure Login Form Panel -->
+      <div class="login-form-panel">
+        <div class="login-form-header">
+          <div class="portal-tag">
+            <span>🛡️</span> Clinical Portal Authentication
+          </div>
+          <h2>เข้าสู่ระบบสารสนเทศ</h2>
+          <p>กรุณาระบุข้อมูลประจำตัวเพื่อเข้าถึงเวชระเบียนและระบบดูแลสุขภาพ</p>
+        </div>
+
+        <div id="login-error" class="badge badge-danger" style="display: none; width: 100%; padding: 0.65rem 0.85rem; margin-bottom: 1.25rem; font-size: 0.8rem; text-align: left; line-height: 1.4;"></div>
+
+        <form id="login-form">
+          <div class="form-group" style="text-align: left; margin-bottom: 1.15rem;">
+            <label class="form-label" for="username">ชื่อผู้ใช้งาน (Username หรือ อีเมล)</label>
+            <div class="input-with-icon">
+              <span class="input-icon-left">👤</span>
+              <input type="text" id="username" class="input-styled" placeholder="กรอกชื่อผู้ใช้งาน" required autocomplete="username">
+            </div>
+          </div>
+
+          <div class="form-group" style="text-align: left; margin-bottom: 1rem;">
+            <label class="form-label" for="password">รหัสผ่าน (Password)</label>
+            <div class="input-with-icon">
+              <span class="input-icon-left">🔒</span>
+              <input type="password" id="password" class="input-styled" placeholder="กรอกรหัสผ่าน" required autocomplete="current-password">
+              <button type="button" class="toggle-password-btn" id="btn-toggle-password" title="แสดง/ซ่อนรหัสผ่าน">
+                👁️
+              </button>
+            </div>
+          </div>
+
+          <div class="form-options-row">
+            <label class="remember-label">
+              <input type="checkbox" id="remember-me" style="width: 15px; height: 15px; accent-color: var(--primary);">
+              <span>จดจำการเข้าสู่ระบบ</span>
+            </label>
+            <span style="font-size: 0.775rem; color: var(--slate-400);">ระบบรักษาความปลอดภัย</span>
+          </div>
+
+          <button type="submit" id="btn-submit-login" class="btn btn-primary btn-signin">
+            <span>เข้าสู่ระบบอย่างปลอดภัย</span> &rarr;
+          </button>
+        </form>
+
+        <div class="legal-notice-box">
+          <strong>⚠️ ประกาศเตือนด้านความปลอดภัย:</strong><br>
+          ระบบนี้สงวนสิทธิ์เฉพาะบุคลากรทางการแพทย์และผู้ป่วยที่ได้รับอนุญาตเท่านั้น การพยายามเข้าถึงโดยมิชอบมีความผิดตาม พ.ร.บ. ว่าด้วยการกระทำความผิดเกี่ยวกับคอมพิวเตอร์ และ พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA)
+        </div>
+
+        <div class="security-trust-strip">
+          <span>🛡️ HIPAA Compliant</span>
+          <span>&bull;</span>
+          <span>🔒 PDPA Certified</span>
+          <span>&bull;</span>
+          <span>⚡ TLS 1.3 256-Bit</span>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- View 2: Main Application Dashboard -->
+  <main id="app-view" class="container" style="display: none;">
+
+    <!-- Executive Patient Summary Card -->
+    <div class="patient-card">
+      <div class="patient-left">
+        <div class="patient-avatar">👤</div>
+        <div class="patient-title-group">
+          <h2>
+            <span id="patient-name">นายสมศักดิ์ สุขใจ</span>
+            <span class="hn-pill" id="patient-hn">HN-68001</span>
+          </h2>
+          <div class="patient-stats-strip" id="patient-meta">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </div>
+      <div class="patient-actions">
+        <button id="btn-open-entry" class="btn btn-primary">
+          📝 บันทึกข้อมูลผู้ป่วย
+        </button>
+        <button id="btn-open-reset" class="btn btn-outline btn-sm" style="color: var(--danger); border-color: var(--slate-300);" title="ล้างข้อมูลเหมือนปุ่มใน Excel">
+          🗑️ ล้างข้อมูลบล็อก
+        </button>
+      </div>
+    </div>
+
+    <!-- Executive 4 KPI Metrics Grid -->
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-remission">
+        <div class="kpi-top">
+          <span class="kpi-title">DM Remission Score</span>
+          <div class="kpi-icon">🎯</div>
+        </div>
+        <div class="kpi-val" id="kpi-score">--%</div>
+        <div class="kpi-desc" id="kpi-score-text">กำลังประเมินผล</div>
+      </div>
+
+      <div class="kpi-card kpi-bp">
+        <div class="kpi-top">
+          <span class="kpi-title">ความดันเฉลี่ยรวม</span>
+          <div class="kpi-icon">🩸</div>
+        </div>
+        <div class="kpi-val" id="kpi-bp">-- / --</div>
+        <div class="kpi-desc" id="kpi-bp-text">เป้าหมาย &lt; 120/80 mmHg</div>
+      </div>
+
+      <div class="kpi-card kpi-glucose">
+        <div class="kpi-top">
+          <span class="kpi-title">น้ำตาลมื้อแรก (FBS)</span>
+          <div class="kpi-icon">🍬</div>
+        </div>
+        <div class="kpi-val" id="kpi-glucose">--</div>
+        <div class="kpi-desc" id="kpi-glucose-text">เป้าหมาย &lt; 100 mg/dL</div>
+      </div>
+
+      <div class="kpi-card kpi-steps">
+        <div class="kpi-top">
+          <span class="kpi-title">ก้าวเดินเฉลี่ยต่อวัน</span>
+          <div class="kpi-icon">👟</div>
+        </div>
+        <div class="kpi-val" id="kpi-steps">--</div>
+        <div class="kpi-desc" id="kpi-steps-text">เป้าหมาย 8,000+ ก้าว</div>
+      </div>
+    </div>
+
+    <!-- Modern Segmented Tab Controls (Guaranteed Zero Overflow) -->
+    <div class="segmented-nav-wrap">
+      <nav class="segmented-nav">
+        <button class="tab-btn active" data-tab="charts">
+          📊 กราฟแนวโน้มสุขภาพ (Analytics)
+        </button>
+        <button class="tab-btn" data-tab="blocks">
+          📝 บันทึกรายวัน 20 สัปดาห์ (Daily Logs)
+        </button>
+        <button class="tab-btn" data-tab="matrix">
+          📋 ตารางเฉลี่ย 20 สัปดาห์ (Summary Matrix)
+        </button>
+        <button class="tab-btn" data-tab="users" id="tab-users-btn" style="display: none;">
+          👥 จัดการผู้ใช้งาน (Users)
+        </button>
+        <button class="tab-btn" data-tab="audit" id="tab-audit-btn">
+          🛡️ บันทึกความปลอดภัย (Security Logs)
+        </button>
+      </nav>
+    </div>
+
+    <!-- Tab 1: Charts & Analytics -->
+    <section id="tab-charts" class="tab-content active">
+      <div class="charts-grid">
+        <!-- BP Chart -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <span class="chart-title">🩸 แนวโน้มความดันโลหิต 20 สัปดาห์</span>
+            <span class="badge badge-success">เกณฑ์ปกติ &le; 120/80</span>
+          </div>
+          <div class="chart-container-box">
+            <canvas id="chart-bp"></canvas>
+          </div>
+        </div>
+
+        <!-- Glucose Chart -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <span class="chart-title">🍬 ระดับน้ำตาลสะสม มื้อแรก & มื้อสุดท้าย</span>
+            <span class="badge badge-primary">ก่อน/หลังอาหาร</span>
+          </div>
+          <div class="chart-container-box">
+            <canvas id="chart-glucose"></canvas>
+          </div>
+        </div>
+
+        <!-- Steps Chart -->
+        <div class="chart-card" style="grid-column: 1 / -1;">
+          <div class="chart-header">
+            <span class="chart-title">👟 สถิติก้าวเดินออกกำลังกายเฉลี่ยรายสัปดาห์</span>
+            <span class="badge badge-teal">เป้าหมาย 8,000 ก้าว/วัน</span>
+          </div>
+          <div class="chart-container-box" style="height: 250px;">
+            <canvas id="chart-steps"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: 20-Week Daily Blocks (Redesigned: Clean, Professional, No Overflow) -->
+    <section id="tab-blocks" class="tab-content">
+      <div class="week-navigator-bar">
+        <div>
+          <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--slate-900);">บันทึกข้อมูลสุขภาพรายวัน (20 สัปดาห์)</h3>
+          <p style="font-size: 0.8rem; color: var(--slate-500);">
+            โครงสร้างข้อมูลถอดแบบจาก Excel พร้อมคำนวณเฉลี่ยรายสัปดาห์ Real-time
+          </p>
+        </div>
+        <div class="week-select-group">
+          <button id="btn-open-entry-2" class="btn btn-primary btn-sm">
+            ➕ บันทึกข้อมูลผู้ป่วย
+          </button>
+        </div>
+      </div>
+
+      <div id="blocks-container">
+        <!-- 20-Week Accordion Cards Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- Tab 3: Summary Matrix (Faithful Replica of columns J to Q in Excel) -->
+    <section id="tab-matrix" class="tab-content">
+      <div class="chart-card" style="padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--slate-900);">ตารางสรุปค่าเฉลี่ยรายสัปดาห์ (Weekly Summary Matrix)</h3>
+            <p style="font-size: 0.8rem; color: var(--slate-500);">
+              คำนวณจากคอลัมน์ J ถึง Q และแถวที่ 23 ในไฟล์ Excel โดยตัดปัญหาข้อผิดพลาด #DIV/0!
+            </p>
+          </div>
+          <button id="btn-print-report" class="btn btn-outline btn-sm">
+            🖨️ พิมพ์รายงาน / PDF
+          </button>
+        </div>
+
+        <div class="table-wrap">
+          <table class="clean-table">
+            <thead>
+              <tr>
+                <th style="width: 14%;">สัปดาห์</th>
+                <th style="width: 18%;">ความดัน (บน/ล่าง)</th>
+                <th style="width: 24%;">น้ำตาลมื้อแรก (ก่อน/หลัง)</th>
+                <th style="width: 24%;">น้ำตาลมื้อสุดท้าย (ก่อน/หลัง)</th>
+                <th style="width: 20%;">ก้าวเดินเฉลี่ย</th>
+              </tr>
+            </thead>
+            <tbody id="summary-matrix-tbody">
+              <!-- Populated via JS -->
+            </tbody>
+            <tfoot>
+              <tr id="grand-avg-row" class="avg-row" style="background: #e0f2fe; color: #0369a1; font-size: 0.9rem;">
+                <!-- Populated via JS -->
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 4: User Management (Admin Only) -->
+    <section id="tab-users" class="tab-content">
+      <div class="chart-card" style="padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--slate-900);">👥 ระบบจัดการผู้ใช้งานและสิทธิ์ความปลอดภัย (User Management)</h3>
+            <p style="font-size: 0.8rem; color: var(--slate-500);">
+              สิทธิ์ผู้ดูแลระบบ (Admin) สามารถ เพิ่ม แก้ไข เปลี่ยนสิทธิ์ รีเซ็ตรหัสผ่าน ปลดล็อค หรือลบบัญชีผู้ใช้
+            </p>
+          </div>
+          <button id="btn-open-new-user" class="btn btn-teal btn-sm">
+            ➕ เพิ่มผู้ใช้งานใหม่
+          </button>
+        </div>
+
+        <div class="table-wrap">
+          <table class="clean-table" style="font-size: 0.825rem;">
+            <thead>
+              <tr>
+                <th style="width: 6%;">ID</th>
+                <th style="width: 14%;">ชื่อผู้ใช้ (Username)</th>
+                <th style="width: 20%;">ชื่อ - นามสกุล</th>
+                <th style="width: 12%;">สิทธิ์ (Role)</th>
+                <th style="width: 18%;">อีเมล</th>
+                <th style="width: 12%;">สถานะความปลอดภัย</th>
+                <th style="width: 18%;">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="users-table-body">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 5: Security Audit Logs -->
+    <section id="tab-audit" class="tab-content">
+      <div class="chart-card" style="padding: 1.25rem;">
+        <div style="margin-bottom: 0.85rem;">
+          <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--slate-900);">🛡️ บันทึกความปลอดภัยระบบ (Immutable Audit Trail)</h3>
+          <p style="font-size: 0.8rem; color: var(--slate-500);">
+            บันทึกประวัติการเข้าดู แก้ไข และเพิ่มข้อมูลสุขภาพตามมาตรฐาน PDPA & HIPAA
+          </p>
+        </div>
+
+        <div class="table-wrap">
+          <table class="clean-table" style="font-size: 0.8rem;">
+            <thead>
+              <tr>
+                <th style="width: 8%;">ID</th>
+                <th style="width: 18%;">วัน-เวลา</th>
+                <th style="width: 16%;">ผู้ดำเนินการ</th>
+                <th style="width: 18%;">กิจกรรม</th>
+                <th style="width: 14%;">HN ผู้ป่วย</th>
+                <th style="width: 14%;">IP Address</th>
+                <th style="width: 12%;">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody id="audit-table-body">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal 1: Patient Entry Form -->
+  <div class="modal-overlay" id="entry-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">📝 บันทึกข้อมูลสุขภาพผู้ป่วย</h3>
+        <button class="close-btn" data-close-modal="entry-modal">&times;</button>
+      </div>
+
+      <form id="entry-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="entry-week">สัปดาห์ที่ (1 - 20)</label>
+            <select id="entry-week" class="form-control" required>
+              <option value="1">สัปดาห์ที่ 1</option>
+              <option value="2">สัปดาห์ที่ 2</option>
+              <option value="3">สัปดาห์ที่ 3</option>
+              <option value="4">สัปดาห์ที่ 4</option>
+              <option value="5">สัปดาห์ที่ 5</option>
+              <option value="6">สัปดาห์ที่ 6</option>
+              <option value="7">สัปดาห์ที่ 7</option>
+              <option value="8">สัปดาห์ที่ 8</option>
+              <option value="9">สัปดาห์ที่ 9</option>
+              <option value="10">สัปดาห์ที่ 10</option>
+              <option value="11">สัปดาห์ที่ 11</option>
+              <option value="12">สัปดาห์ที่ 12</option>
+              <option value="13">สัปดาห์ที่ 13</option>
+              <option value="14">สัปดาห์ที่ 14</option>
+              <option value="15">สัปดาห์ที่ 15</option>
+              <option value="16">สัปดาห์ที่ 16</option>
+              <option value="17">สัปดาห์ที่ 17</option>
+              <option value="18">สัปดาห์ที่ 18</option>
+              <option value="19">สัปดาห์ที่ 19</option>
+              <option value="20">สัปดาห์ที่ 20</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="entry-day">วันที่ของสัปดาห์ (1 - 7)</label>
+            <select id="entry-day" class="form-control" required>
+              <option value="1">วันที่ 1 (จันทร์ / วันแรก)</option>
+              <option value="2">วันที่ 2</option>
+              <option value="3">วันที่ 3</option>
+              <option value="4">วันที่ 4</option>
+              <option value="5">วันที่ 5</option>
+              <option value="6">วันที่ 6</option>
+              <option value="7">วันที่ 7 (วันสุดท้าย)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="entry-date">วันที่บันทึกจริง (Calendar Date)</label>
+          <input type="date" id="entry-date" class="form-control">
+        </div>
+
+        <h4 style="font-size: 0.9rem; font-weight: 700; margin: 0.75rem 0 0.4rem; color: var(--primary);">
+          🩸 ความดันโลหิต (Blood Pressure - mmHg)
+        </h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="entry-sys">ความดัน บน (Systolic)</label>
+            <input type="number" id="entry-sys" class="form-control" placeholder="เช่น 120" min="40" max="300">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="entry-dia">ความดัน ล่าง (Diastolic)</label>
+            <input type="number" id="entry-dia" class="form-control" placeholder="เช่น 80" min="30" max="200">
+          </div>
+        </div>
+
+        <h4 style="font-size: 0.9rem; font-weight: 700; margin: 0.75rem 0 0.4rem; color: #8b5cf6;">
+          🍬 ระดับน้ำตาลในเลือด (Blood Glucose - mg/dL)
+        </h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="entry-g1-pre">มื้อแรก: ก่อนอาหาร (FBS)</label>
+            <input type="number" id="entry-g1-pre" class="form-control" placeholder="เช่น 95" min="20" max="700">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="entry-g1-post">มื้อแรก: หลังอาหาร</label>
+            <input type="number" id="entry-g1-post" class="form-control" placeholder="เช่น 130" min="20" max="700">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="entry-g2-pre">มื้อสุดท้าย: ก่อนอาหาร</label>
+            <input type="number" id="entry-g2-pre" class="form-control" placeholder="เช่น 100" min="20" max="700">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="entry-g2-post">มื้อสุดท้าย: หลังอาหาร</label>
+            <input type="number" id="entry-g2-post" class="form-control" placeholder="เช่น 135" min="20" max="700">
+          </div>
+        </div>
+
+        <h4 style="font-size: 0.9rem; font-weight: 700; margin: 0.75rem 0 0.4rem; color: var(--teal);">
+          👟 กิจกรรมทางกาย & หมายเหตุ
+        </h4>
+        <div class="form-group">
+          <label class="form-label" for="entry-steps">จำนวนก้าวเดินประจำวัน (Daily Steps)</label>
+          <input type="number" id="entry-steps" class="form-control" placeholder="เช่น 8500" min="0" max="150000">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="entry-notes">บันทึกเพิ่มเติม / อาการ / พฤติกรรมอาหาร</label>
+          <textarea id="entry-notes" class="form-control" rows="2" placeholder="เช่น เดินเร็ว 30 นาที, ทานอาหารตรงเวลา"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1.25rem;">
+          <button type="button" class="btn btn-outline" data-close-modal="entry-modal">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary">💾 บันทึกข้อมูล</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: New Patient Modal -->
+  <div class="modal-overlay" id="patient-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">➕ ลงทะเบียนผู้ป่วยใหม่ (DM Remission)</h3>
+        <button class="close-btn" data-close-modal="patient-modal">&times;</button>
+      </div>
+
+      <form id="patient-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="new-hn">รหัสประจำตัวผู้ป่วย (HN) *</label>
+            <input type="text" id="new-hn" class="form-control" placeholder="เช่น HN-68005" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-citizen-id">เลขประจำตัวประชาชน (13 หลัก)</label>
+            <input type="text" id="new-citizen-id" class="form-control" placeholder="เช่น 1-1002-00123-45-6" maxlength="17">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-name">ชื่อ - นามสกุล *</label>
+          <input type="text" id="new-name" class="form-control" placeholder="เช่น นายวันชัย รักสุขภาพ" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="new-gender">เพศ</label>
+            <select id="new-gender" class="form-control">
+              <option value="M">ชาย (Male)</option>
+              <option value="F">หญิง (Female)</option>
+              <option value="Other">อื่นๆ</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-age">อายุ (ปี)</label>
+            <input type="number" id="new-age" class="form-control" placeholder="เช่น 50" min="1" max="120">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="new-weight">น้ำหนักเริ่มต้น (กก.)</label>
+            <input type="number" step="0.1" id="new-weight" class="form-control" placeholder="เช่น 80.5">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-target-weight">เป้าหมายน้ำหนัก (กก.)</label>
+            <input type="number" step="0.1" id="new-target-weight" class="form-control" placeholder="เช่น 70.0">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="new-hba1c">HbA1c เริ่มต้น (%)</label>
+            <input type="number" step="0.1" id="new-hba1c" class="form-control" placeholder="เช่น 8.0">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-start-date">วันที่เริ่มโปรแกรม *</label>
+            <input type="date" id="new-start-date" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-notes">แผนการดูแลรักษา / ยาลดเบาหวานที่ใช้</label>
+          <textarea id="new-notes" class="form-control" rows="2" placeholder="เช่น ปรับเปลี่ยนอาหารแบบ Low-Carb"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1.25rem;">
+          <button type="button" class="btn btn-outline" data-close-modal="patient-modal">ยกเลิก</button>
+          <button type="submit" class="btn btn-teal">ลงทะเบียนผู้ป่วย</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 3: Reset Confirmation -->
+  <div class="modal-overlay" id="reset-modal">
+    <div class="modal-box" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="color: var(--danger);">⚠️ ยืนยันการล้างข้อมูลบล็อก</h3>
+        <button class="close-btn" data-close-modal="reset-modal">&times;</button>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <p style="font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--slate-700);">
+          ฟังก์ชันนี้เทียบเท่ากับการกดปุ่ม <strong>ClearSpecific20Blocks</strong> ในไฟล์ Excel เดิม
+        </p>
+        <p style="font-size: 0.8rem; color: var(--slate-500); margin-bottom: 0.85rem;">
+          ระบบจะล้างเฉพาะค่าที่บันทึก แต่ประวัติผู้ป่วยและระบบความปลอดภัยจะยังคงอยู่อย่างครบถ้วน
+        </p>
+
+        <div class="form-group">
+          <label class="form-label" for="reset-target">เลือกขอบเขตที่ต้องการล้างข้อมูล:</label>
+          <select id="reset-target" class="form-control">
+            <option value="all">ล้างครบทั้ง 20 สัปดาห์ (Reset ทั้งหมด)</option>
+            <option value="1">ล้างเฉพาะสัปดาห์ที่ 1</option>
+            <option value="2">ล้างเฉพาะสัปดาห์ที่ 2</option>
+            <option value="3">ล้างเฉพาะสัปดาห์ที่ 3</option>
+            <option value="4">ล้างเฉพาะสัปดาห์ที่ 4</option>
+            <option value="5">ล้างเฉพาะสัปดาห์ที่ 5</option>
+            <option value="6">ล้างเฉพาะสัปดาห์ที่ 6</option>
+            <option value="7">ล้างเฉพาะสัปดาห์ที่ 7</option>
+            <option value="8">ล้างเฉพาะสัปดาห์ที่ 8</option>
+            <option value="9">ล้างเฉพาะสัปดาห์ที่ 9</option>
+            <option value="10">ล้างเฉพาะสัปดาห์ที่ 10</option>
+            <option value="11">ล้างเฉพาะสัปดาห์ที่ 11</option>
+            <option value="12">ล้างเฉพาะสัปดาห์ที่ 12</option>
+            <option value="13">ล้างเฉพาะสัปดาห์ที่ 13</option>
+            <option value="14">ล้างเฉพาะสัปดาห์ที่ 14</option>
+            <option value="15">ล้างเฉพาะสัปดาห์ที่ 15</option>
+            <option value="16">ล้างเฉพาะสัปดาห์ที่ 16</option>
+            <option value="17">ล้างเฉพาะสัปดาห์ที่ 17</option>
+            <option value="18">ล้างเฉพาะสัปดาห์ที่ 18</option>
+            <option value="19">ล้างเฉพาะสัปดาห์ที่ 19</option>
+            <option value="20">ล้างเฉพาะสัปดาห์ที่ 20</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.65rem;">
+        <button type="button" class="btn btn-outline" data-close-modal="reset-modal">ยกเลิก</button>
+        <button type="button" id="btn-confirm-reset" class="btn btn-danger">ยืนยันการล้างข้อมูล</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Add / Edit User Modal (Admin Only) -->
+  <div class="modal-overlay" id="user-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="user-modal-title">👥 เพิ่มผู้ใช้งานใหม่</h3>
+        <button class="close-btn" data-close-modal="user-modal">&times;</button>
+      </div>
+
+      <form id="user-form">
+        <input type="hidden" id="edit-user-id" value="">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="user-username">ชื่อผู้ใช้งาน (Username) *</label>
+            <input type="text" id="user-username" class="form-control" placeholder="เช่น dr.somchai, nurse_ann" required>
+            <small style="font-size: 0.725rem; color: var(--slate-400);">ภาษาอังกฤษ/ตัวเลข 3-30 ตัวอักษร</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="user-role">สิทธิ์การใช้งาน (Role) *</label>
+            <select id="user-role" class="form-control" required>
+              <option value="doctor">👨‍⚕️ แพทย์ (Doctor)</option>
+              <option value="nurse">👩‍⚕️ พยาบาล (Nurse)</option>
+              <option value="admin">⚙️ ผู้ดูแลระบบ (Admin)</option>
+              <option value="patient">🧑‍🦱 ผู้ป่วย (Patient)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="user-fullname">ชื่อ - นามสกุล *</label>
+            <input type="text" id="user-fullname" class="form-control" placeholder="เช่น พญ.สมหญิง ใจดี" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="user-email">อีเมล (Email)</label>
+            <input type="email" id="user-email" class="form-control" placeholder="user@hospital.org">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="user-password">รหัสผ่าน (Password) <span id="pw-required-note">*</span></label>
+          <input type="password" id="user-password" class="form-control" placeholder="อย่างน้อย 6 ตัวอักษร">
+          <small id="pw-hint" style="font-size: 0.725rem; color: var(--slate-400); display: none;">
+            เว้นว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่านเดิม
+          </small>
+        </div>
+
+        <!-- Linked Patient (only shown if role is patient) -->
+        <div class="form-group" id="patient-link-group" style="display: none;">
+          <label class="form-label" for="user-patient-link">เชื่อมโยงกับโปรไฟล์ผู้ป่วย (Linked Patient)</label>
+          <select id="user-patient-link" class="form-control">
+            <option value="">-- ไม่เชื่อมโยง --</option>
+          </select>
+        </div>
+
+        <!-- Unlock account toggle (only shown if account locked) -->
+        <div class="form-group" id="user-unlock-group" style="display: none; background: #fffbeb; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid #fde68a;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; color: #92400e; cursor: pointer;">
+            <input type="checkbox" id="user-unlock-check" style="width: 16px; height: 16px;">
+            🔓 ปลดล็อคบัญชีนี้ทันที (รีเซ็ตจำนวนครั้งที่ใส่รหัสผ่านผิด)
+          </label>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1.25rem;">
+          <button type="button" class="btn btn-outline" data-close-modal="user-modal">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-user">💾 บันทึกข้อมูลผู้ใช้</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 5: Delete User Confirmation Modal -->
+  <div class="modal-overlay" id="delete-user-modal">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="color: var(--danger);">🗑️ ยืนยันการลบผู้ใช้งาน</h3>
+        <button class="close-btn" data-close-modal="delete-user-modal">&times;</button>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <p style="font-size: 0.9rem; color: var(--slate-700); margin-bottom: 0.5rem;">
+          คุณแน่ใจหรือไม่ว่าต้องการลบบัญชีผู้ใช้:
+        </p>
+        <div style="background: var(--slate-100); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 0.75rem;">
+          <strong id="delete-user-name" style="color: var(--slate-900); font-size: 1rem;">-</strong><br>
+          <small style="color: var(--slate-500);">Username: <span id="delete-user-username">-</span> | Role: <span id="delete-user-role">-</span></small>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--danger);">
+          ⚠️ การลบนี้ไม่สามารถย้อนกลับได้ และจะถูกบันทึกลงใน Security Audit Trail
+        </p>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.65rem;">
+        <button type="button" class="btn btn-outline" data-close-modal="delete-user-modal">ยกเลิก</button>
+        <button type="button" id="btn-confirm-delete-user" class="btn btn-danger">ยืนยันการลบ</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p>DM Remission Health Application &bull; ออกแบบเพื่อการติดตามผลเบาหวานอย่างเป็นระบบ &bull; มาตรฐานความปลอดภัยข้อมูลสุขภาพ OWASP / HIPAA</p>
+  </footer>
+
+  <script src="js/api.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
