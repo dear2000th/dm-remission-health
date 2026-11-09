@@ -1,3 +1,76 @@
+// Executive Toast Notification System (Replaces native browser alerts)
+const Toast = (function () {
+  function show(type, title, message, duration = 4000) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.className = 'toast-container';
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast-card ${type}`;
+
+    const icons = {
+      success: '✓',
+      error: '✕',
+      warning: '!',
+      info: 'i'
+    };
+
+    toast.innerHTML = `
+      <div class="toast-icon-wrap">${icons[type] || '✓'}</div>
+      <div class="toast-body">
+        <div class="toast-title">${title}</div>
+        <div class="toast-message">${message}</div>
+      </div>
+      <button class="toast-close-btn" title="ปิด">&times;</button>
+    `;
+
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+      toast.classList.add('show');
+    });
+
+    let isClosed = false;
+    const closeToast = () => {
+      if (isClosed) return;
+      isClosed = true;
+      toast.classList.remove('show');
+      setTimeout(() => {
+        if (toast.parentElement) toast.parentElement.removeChild(toast);
+      }, 350);
+    };
+
+    toast.querySelector('.toast-close-btn').addEventListener('click', closeToast);
+
+    if (duration > 0) {
+      setTimeout(closeToast, duration);
+    }
+  }
+
+  return {
+    success: (title, message) => show('success', title, message),
+    error: (title, message) => show('error', title, message),
+    warning: (title, message) => show('warning', title, message),
+    info: (title, message) => show('info', title, message)
+  };
+})();
+
+// Attach to window and gracefully override window.alert
+window.Toast = Toast;
+window.alert = function (message) {
+  if (typeof message === 'string' && (message.includes('ข้อผิดพลาด') || message.includes('ไม่สำเร็จ') || message.includes('Error'))) {
+    Toast.error('แจ้งเตือนระบบ', message);
+  } else if (typeof message === 'string' && (message.includes('สำเร็จ') || message.includes('เรียบร้อย'))) {
+    Toast.success('สำเร็จ', message);
+  } else {
+    Toast.info('แจ้งเตือนระบบ', message);
+  }
+};
+
 // DM Remission Application Controller
 const App = (function () {
   let currentUser = null;
@@ -33,7 +106,7 @@ const App = (function () {
 
   function setupEventListeners() {
     window.addEventListener('auth:expired', () => {
-      alert('Session ของท่านหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่');
+      Toast.warning('Session หมดอายุ', 'Session ของท่านหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่');
       showLogin();
     });
 
@@ -256,7 +329,7 @@ const App = (function () {
     if (btnOpenEditPatient) {
       btnOpenEditPatient.addEventListener('click', () => {
         if (!currentPatient) {
-          alert('กรุณาเลือกผู้ป่วยก่อน');
+          Toast.warning('แจ้งเตือน', 'กรุณาเลือกผู้ป่วยก่อน');
           return;
         }
         $('edit-hn').value = currentPatient.hn || '';
@@ -302,11 +375,11 @@ const App = (function () {
         try {
           const res = await API.updatePatient(currentPatient.id, payload);
           closeModal($('edit-patient-modal'));
-          alert('แก้ไขข้อมูลเวชระเบียนผู้ป่วยขึ้น Cloud Firestore เรียบร้อยแล้ว!');
+          Toast.success('แก้ไขข้อมูลสำเร็จ', 'ปรับปรุงข้อมูลเวชระเบียนผู้ป่วยขึ้น Cloud Firestore เรียบร้อยแล้ว!');
           await loadPatientsList();
           await loadPatientData(currentPatient.id);
         } catch (err) {
-          alert(`เกิดข้อผิดพลาดในการแก้ไข: ${err.message}`);
+          Toast.error('เกิดข้อผิดพลาดในการแก้ไข', err.message);
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;
@@ -321,7 +394,7 @@ const App = (function () {
     if (btnOpenDeletePatient) {
       btnOpenDeletePatient.addEventListener('click', () => {
         if (!currentPatient) {
-          alert('กรุณาเลือกผู้ป่วยก่อน');
+          Toast.warning('แจ้งเตือน', 'กรุณาเลือกผู้ป่วยก่อน');
           return;
         }
         $('delete-patient-name').innerText = currentPatient.full_name;
@@ -339,7 +412,7 @@ const App = (function () {
           btnConfirmDeletePatient.disabled = true;
           const res = await API.deletePatient(currentPatient.id);
           closeModal($('delete-patient-modal'));
-          alert(res.message || 'ลบข้อมูลผู้ป่วยเรียบร้อยแล้ว');
+          Toast.success('ลบข้อมูลสำเร็จ', res.message || 'ลบข้อมูลผู้ป่วยเรียบร้อยแล้ว');
           await loadPatientsList();
           if (patientsList.length > 0) {
             await loadPatientData(patientsList[0].id);
@@ -350,7 +423,7 @@ const App = (function () {
             $('patient-meta').innerHTML = '';
           }
         } catch (err) {
-          alert(`เกิดข้อผิดพลาดในการลบ: ${err.message}`);
+          Toast.error('เกิดข้อผิดพลาดในการลบ', err.message);
         } finally {
           btnConfirmDeletePatient.disabled = false;
         }
@@ -401,20 +474,20 @@ const App = (function () {
           if (!userId) {
             // Create user
             if (!payload.password) {
-              alert('กรุณาระบุรหัสผ่านสำหรับผู้ใช้งานใหม่');
+              Toast.warning('กรอกข้อมูลไม่ครบ', 'กรุณาระบุรหัสผ่านสำหรับผู้ใช้งานใหม่');
               return;
             }
             const res = await API.createUser(payload);
-            alert(res.message || 'สร้างผู้ใช้งานใหม่สำเร็จ!');
+            Toast.success('สร้างผู้ใช้สำเร็จ', res.message || 'สร้างผู้ใช้งานใหม่สำเร็จ!');
           } else {
             // Update user
             const res = await API.updateUser(userId, payload);
-            alert(res.message || 'ปรับปรุงข้อมูลผู้ใช้งานสำเร็จ!');
+            Toast.success('อัปเดตผู้ใช้สำเร็จ', res.message || 'ปรับปรุงข้อมูลผู้ใช้งานสำเร็จ!');
           }
           closeModal($('user-modal'));
           await loadUsersList();
         } catch (err) {
-          alert(`เกิดข้อผิดพลาด: ${err.message}`);
+          Toast.error('เกิดข้อผิดพลาด', err.message);
         }
       });
     }
@@ -426,11 +499,11 @@ const App = (function () {
         try {
           const res = await API.deleteUser(userToDelete.id);
           closeModal($('delete-user-modal'));
-          alert(res.message || 'ลบผู้ใช้งานเรียบร้อยแล้ว');
+          Toast.success('ลบผู้ใช้สำเร็จ', res.message || 'ลบผู้ใช้งานเรียบร้อยแล้ว');
           userToDelete = null;
           await loadUsersList();
         } catch (err) {
-          alert(`เกิดข้อผิดพลาด: ${err.message}`);
+          Toast.error('เกิดข้อผิดพลาดในการลบ', err.message);
         }
       });
     }
@@ -459,7 +532,7 @@ const App = (function () {
       entryForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!currentPatient) {
-          alert('กรุณาเลือกผู้ป่วยก่อนบันทึก');
+          Toast.warning('แจ้งเตือน', 'กรุณาเลือกผู้ป่วยก่อนบันทึกข้อมูล');
           return;
         }
 
@@ -486,10 +559,10 @@ const App = (function () {
         try {
           const res = await API.saveRecord(currentPatient.id, payload);
           closeModal($('entry-modal'));
-          alert(res.message || 'บันทึกข้อมูลสุขภาพขึ้น Cloud Firestore เรียบร้อยแล้ว!');
+          Toast.success('บันทึกข้อมูลสุขภาพสำเร็จ', res.message || 'บันทึกข้อมูลสุขภาพขึ้น Cloud Firestore เรียบร้อยแล้ว!');
           await loadPatientData(currentPatient.id);
         } catch (err) {
-          alert(`เกิดข้อผิดพลาด: ${err.message}`);
+          Toast.error('เกิดข้อผิดพลาด', err.message);
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;
@@ -527,11 +600,11 @@ const App = (function () {
           const res = await API.createPatient(payload);
           closeModal($('patient-modal'));
           patientForm.reset();
-          alert('ลงทะเบียนผู้ป่วยใหม่ขึ้น Cloud Firestore สำเร็จ!');
+          Toast.success('ลงทะเบียนสำเร็จ', 'ลงทะเบียนผู้ป่วยใหม่ขึ้น Cloud Firestore เรียบร้อยแล้ว!');
           await loadPatientsList();
           loadPatientData(res.patientId);
         } catch (err) {
-          alert(`เกิดข้อผิดพลาด: ${err.message}`);
+          Toast.error('เกิดข้อผิดพลาด', err.message);
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;
@@ -550,10 +623,10 @@ const App = (function () {
         try {
           const res = await API.resetBlocks(currentPatient.id, target);
           closeModal($('reset-modal'));
-          alert(res.message);
+          Toast.success('ล้างข้อมูลบล็อกสำเร็จ', res.message);
           await loadPatientData(currentPatient.id);
         } catch (err) {
-          alert(`เกิดข้อผิดพลาด: ${err.message}`);
+          Toast.error('เกิดข้อผิดพลาด', err.message);
         }
       });
     }
@@ -782,7 +855,7 @@ const App = (function () {
       renderSummaryMatrix();
     } catch (err) {
       console.error('Failed to load patient analytics:', err);
-      alert(`ไม่สามารถดึงข้อมูลผู้ป่วยได้: ${err.message}`);
+      Toast.error('ข้อผิดพลาด', `ไม่สามารถดึงข้อมูลผู้ป่วยได้: ${err.message}`);
     }
   }
 
