@@ -4,9 +4,11 @@ const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { initDatabase } = require('./database');
+const { initFirebase } = require('./firebase');
 
-// Initialize database schema
+// Initialize database schema (SQLite fallback + Firestore check)
 initDatabase();
+initFirebase();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
