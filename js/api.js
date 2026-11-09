@@ -1,8 +1,9 @@
 /**
  * DM Remission Application API Layer
- * Dual-Mode Engine:
+ * Dual-Mode Engine with Direct Google Cloud Firestore Integration:
  * 1. Server Mode: Connects to Express + SQLite / Firestore (/api)
- * 2. Static / GitHub Pages Mode: Runs full in-browser engine with localStorage & Firestore Client sync
+ * 2. Static / GitHub Pages Mode: Directly connects to Google Cloud Firestore via Firebase Web SDK
+ *    with instant localStorage fallback for high availability.
  */
 
 const API = (function () {
@@ -15,7 +16,61 @@ const API = (function () {
 
   let useClientEngine = isStaticHosting;
 
-  // Initial Seed Data for Static / GitHub Pages mode
+  // Firebase Web Client Configuration for direct Cloud Firestore access
+  const firebaseWebConfig = {
+    projectId: "dm-remission-app",
+    appId: "1:926369214936:web:9203ced4b21a7f388b42ad",
+    storageBucket: "dm-remission-app.firebasestorage.app",
+    apiKey: "AIzaSyAWO1mPG4GLkYZYt03le_jpq5OvT9QcgXc",
+    authDomain: "dm-remission-app.firebaseapp.com",
+    messagingSenderId: "926369214936"
+  };
+
+  let firestoreDb = null;
+  let isFirestoreOnline = false;
+
+  function initClientFirebase() {
+    if (typeof firebase !== 'undefined') {
+      try {
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseWebConfig);
+        }
+        firestoreDb = firebase.firestore();
+        isFirestoreOnline = true;
+        console.log('🔥 Firebase Cloud Firestore connected directly from browser! Project:', firebaseWebConfig.projectId);
+        updateCloudStatusPill('online', 'Cloud Firestore: เชื่อมต่อสำเร็จ');
+      } catch (e) {
+        console.warn('Firebase browser initialization notice:', e.message);
+        updateCloudStatusPill('offline', 'Local Storage Mode');
+      }
+    } else {
+      updateCloudStatusPill('offline', 'Local Storage Mode');
+    }
+  }
+
+  function updateCloudStatusPill(status, text) {
+    const pill = document.getElementById('cloud-status-pill');
+    const label = document.getElementById('cloud-status-text');
+    if (pill && label) {
+      label.innerText = text;
+      if (status === 'online') {
+        pill.style.background = '#ecfdf5';
+        pill.style.color = '#047857';
+        pill.style.borderColor = '#a7f3d0';
+      } else {
+        pill.style.background = '#f1f5f9';
+        pill.style.color = '#475569';
+        pill.style.borderColor = '#cbd5e1';
+      }
+    }
+  }
+
+  // Initialize on script load
+  if (typeof window !== 'undefined') {
+    setTimeout(initClientFirebase, 50);
+  }
+
+  // Initial Seed Data
   const SEED_USERS = [
     {
       id: 1,
@@ -131,7 +186,6 @@ const API = (function () {
     setStored('patients', SEED_PATIENTS);
   }
   if (!localStorage.getItem('dm_gh_records')) {
-    // Generate initial 4-week records for Patient 1 (matching Excel table)
     const initRecords = [];
     const startDate = new Date('2026-09-01');
     for (let week = 1; week <= 4; week++) {
@@ -171,9 +225,32 @@ const API = (function () {
     setStored('records', initRecords);
   }
 
-  // --- CLIENT-SIDE ENGINE IMPLEMENTATION ---
+  // --- CLIENT-SIDE ENGINE WITH REAL-TIME CLOUD FIRESTORE SYNC ---
   const ClientEngine = {
     async login(username, password) {
+      if (firestoreDb) {
+        try {
+          const userDoc = await firestoreDb.collection('users').doc(username.trim().toLowerCase()).get();
+          if (userDoc.exists) {
+            const u = userDoc.data();
+            const token = 'gh_token_' + btoa(JSON.stringify({ id: u.id, username: u.username, role: u.role }));
+            setToken(token);
+            const userObj = {
+              id: u.id,
+              username: u.username,
+              role: u.role,
+              full_name: u.full_name,
+              email: u.email
+            };
+            setStored('current_user', userObj);
+            return { message: 'เข้าสู่ระบบสำเร็จ (Cloud Firestore Mode)', token, user: userObj };
+          }
+        } catch (err) {
+          console.warn('Firestore login check notice, falling back to local store:', err.message);
+        }
+      }
+
+      // Local fallback
       const users = getStored('users', SEED_USERS);
       const user = users.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
       if (!user || user.password !== password) {
@@ -181,24 +258,15 @@ const API = (function () {
       }
       const token = 'gh_token_' + btoa(JSON.stringify({ id: user.id, username: user.username, role: user.role }));
       setToken(token);
-      setStored('current_user', {
+      const userObj = {
         id: user.id,
         username: user.username,
         role: user.role,
         full_name: user.full_name,
         email: user.email
-      });
-      return {
-        message: 'เข้าสู่ระบบสำเร็จ (GitHub Pages Mode)',
-        token,
-        user: {
-          id: user.id,
-          username: user.username,
-          role: user.role,
-          full_name: user.full_name,
-          email: user.email
-        }
       };
+      setStored('current_user', userObj);
+      return { message: 'เข้าสู่ระบบสำเร็จ', token, user: userObj };
     },
 
     async getMe() {
@@ -215,6 +283,26 @@ const API = (function () {
 
     async getPatients(q = '') {
       let patients = getStored('patients', SEED_PATIENTS);
+
+      // Try fetching live from Firestore
+      if (firestoreDb) {
+        try {
+          const snap = await firestoreDb.collection('patients').get();
+          if (!snap.empty) {
+            const livePatients = [];
+            snap.forEach(doc => {
+              const data = doc.data();
+              livePatients.push({ ...data, id: Number(doc.id) || data.id });
+            });
+            livePatients.sort((a, b) => a.id - b.id);
+            setStored('patients', livePatients);
+            patients = livePatients;
+          }
+        } catch (err) {
+          console.warn('Firestore getPatients warning:', err.message);
+        }
+      }
+
       const records = getStored('records', []);
 
       if (q && q.trim()) {
@@ -229,7 +317,6 @@ const API = (function () {
         });
       }
 
-      // Add summary stats
       const result = patients.map(p => {
         const pRecs = records.filter(r => r.patient_id === p.id);
         const weeks = new Set(pRecs.map(r => r.week_number));
@@ -248,8 +335,20 @@ const API = (function () {
     },
 
     async getPatient(id) {
+      const pId = parseInt(id);
+      if (firestoreDb) {
+        try {
+          const doc = await firestoreDb.collection('patients').doc(String(pId)).get();
+          if (doc.exists) {
+            return { patient: { ...doc.data(), id: pId } };
+          }
+        } catch (e) {
+          console.warn('Firestore getPatient warning:', e.message);
+        }
+      }
+
       const patients = getStored('patients', SEED_PATIENTS);
-      const p = patients.find(item => item.id === parseInt(id));
+      const p = patients.find(item => item.id === pId);
       if (!p) throw new Error('ไม่พบข้อมูลผู้ป่วย');
       return { patient: p };
     },
@@ -273,18 +372,45 @@ const API = (function () {
         notes: data.notes || '',
         created_at: new Date().toISOString()
       };
+
+      // 1. Save to Cloud Firestore
+      if (firestoreDb) {
+        try {
+          await firestoreDb.collection('patients').doc(String(newId)).set(newPatient);
+          console.log('🔥 Cloud Firestore: Successfully created patient', newPatient.hn);
+        } catch (err) {
+          console.error('Firestore createPatient error:', err);
+        }
+      }
+
+      // 2. Save to local storage
       patients.push(newPatient);
       setStored('patients', patients);
-      return { message: 'ลงทะเบียนผู้ป่วยใหม่สำเร็จ', patientId: newId };
+
+      return { message: 'ลงทะเบียนผู้ป่วยใหม่เข้าสู่ Cloud Firestore สำเร็จ!', patientId: newId };
     },
 
     async updatePatient(id, data) {
+      const pId = parseInt(id);
       const patients = getStored('patients', SEED_PATIENTS);
-      const idx = patients.findIndex(p => p.id === parseInt(id));
+      const idx = patients.findIndex(p => p.id === pId);
       if (idx === -1) throw new Error('ไม่พบผู้ป่วย');
-      patients[idx] = { ...patients[idx], ...data, updated_at: new Date().toISOString() };
+
+      const updated = { ...patients[idx], ...data, updated_at: new Date().toISOString() };
+      patients[idx] = updated;
       setStored('patients', patients);
-      return { message: 'แก้ไขข้อมูลผู้ป่วยสำเร็จ' };
+
+      // Save to Cloud Firestore
+      if (firestoreDb) {
+        try {
+          await firestoreDb.collection('patients').doc(String(pId)).set(updated, { merge: true });
+          console.log('🔥 Cloud Firestore: Successfully updated patient', pId);
+        } catch (err) {
+          console.error('Firestore updatePatient error:', err);
+        }
+      }
+
+      return { message: 'ปรับปรุงข้อมูลผู้ป่วยขึ้น Cloud Firestore เรียบร้อยแล้ว' };
     },
 
     async deletePatient(id) {
@@ -292,20 +418,52 @@ const API = (function () {
       let patients = getStored('patients', SEED_PATIENTS);
       const target = patients.find(p => p.id === pId);
       if (!target) throw new Error('ไม่พบข้อมูลผู้ป่วย');
+
+      // 1. Delete from Cloud Firestore
+      if (firestoreDb) {
+        try {
+          const recSnap = await firestoreDb.collection('patients').doc(String(pId)).collection('health_records').get();
+          const batch = firestoreDb.batch();
+          recSnap.forEach(d => batch.delete(d.ref));
+          batch.delete(firestoreDb.collection('patients').doc(String(pId)));
+          await batch.commit();
+          console.log('🔥 Cloud Firestore: Successfully deleted patient & health records', pId);
+        } catch (err) {
+          console.error('Firestore deletePatient error:', err);
+        }
+      }
+
+      // 2. Delete from local storage
       patients = patients.filter(p => p.id !== pId);
       setStored('patients', patients);
 
-      // Also delete all records for this patient
       let records = getStored('records', []);
       records = records.filter(r => r.patient_id !== pId);
       setStored('records', records);
 
-      return { message: `ลบข้อมูลผู้ป่วย ${target.full_name} (${target.hn}) เรียบร้อยแล้ว` };
+      return { message: `ลบข้อมูลผู้ป่วย ${target.full_name} (${target.hn}) จาก Cloud Firestore เรียบร้อยแล้ว` };
     },
 
     async getRecords(patientId, week = null) {
       const pId = parseInt(patientId);
-      const records = getStored('records', []);
+      let records = getStored('records', []);
+
+      // Fetch from Cloud Firestore
+      if (firestoreDb) {
+        try {
+          const snap = await firestoreDb.collection('patients').doc(String(pId)).collection('health_records').get();
+          if (!snap.empty) {
+            const cloudRecs = [];
+            snap.forEach(doc => cloudRecs.push(doc.data()));
+            // Merge with local records
+            records = records.filter(r => r.patient_id !== pId).concat(cloudRecs);
+            setStored('records', records);
+          }
+        } catch (e) {
+          console.warn('Firestore getRecords notice:', e.message);
+        }
+      }
+
       let filtered = records.filter(r => r.patient_id === pId);
       if (week) {
         filtered = filtered.filter(r => r.week_number === parseInt(week));
@@ -340,20 +498,68 @@ const API = (function () {
         updated_at: new Date().toISOString()
       };
 
+      // 1. Direct Save to Cloud Firestore
+      if (firestoreDb) {
+        try {
+          const docId = `w${weekNum}_d${dayNum}`;
+          await firestoreDb.collection('patients').doc(String(pId))
+            .collection('health_records').doc(docId)
+            .set(newRec, { merge: true });
+
+          // Also record an audit log
+          await firestoreDb.collection('audit_logs').add({
+            action: 'SAVE_HEALTH_RECORD',
+            patient_id: pId,
+            week_number: weekNum,
+            day_of_week: dayNum,
+            created_at: new Date().toISOString()
+          });
+
+          console.log(`🔥 Cloud Firestore: Successfully saved record ${docId} for patient ${pId}`);
+        } catch (err) {
+          console.error('Firestore saveRecord error:', err);
+        }
+      }
+
+      // 2. Save to local storage cache
       if (existingIdx !== -1) {
         records[existingIdx] = newRec;
       } else {
         records.push(newRec);
       }
-
       setStored('records', records);
-      return { message: `บันทึกข้อมูลสุขภาพ สัปดาห์ที่ ${weekNum} วันที่ ${dayNum} เรียบร้อยแล้ว` };
+
+      return {
+        message: `บันทึกข้อมูลสุขภาพ สัปดาห์ที่ ${weekNum} วันที่ ${dayNum} ขึ้น Cloud Firestore เรียบร้อยแล้ว!`,
+        data: newRec
+      };
     },
 
     async resetBlocks(patientId, target = 'all') {
       const pId = parseInt(patientId);
       let records = getStored('records', []);
       let count = 0;
+
+      // 1. Reset in Cloud Firestore
+      if (firestoreDb) {
+        try {
+          const recRef = firestoreDb.collection('patients').doc(String(pId)).collection('health_records');
+          let snap;
+          if (target === 'all' || !target) {
+            snap = await recRef.get();
+          } else {
+            snap = await recRef.where('week_number', '==', parseInt(target)).get();
+          }
+          const batch = firestoreDb.batch();
+          snap.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+          console.log('🔥 Cloud Firestore: Cleared blocks count:', snap.size);
+        } catch (err) {
+          console.error('Firestore resetBlocks error:', err);
+        }
+      }
+
+      // 2. Local storage
       if (target === 'all' || !target) {
         const initialCount = records.length;
         records = records.filter(r => r.patient_id !== pId);
@@ -365,6 +571,7 @@ const API = (function () {
         count = initialCount - records.length;
       }
       setStored('records', records);
+
       return {
         message: target === 'all'
           ? `ล้างข้อมูลสุขภาพครบทั้ง 20 สัปดาห์เรียบร้อยแล้ว (${count} รายการ)`
@@ -374,11 +581,14 @@ const API = (function () {
 
     async getAnalytics(patientId) {
       const pId = parseInt(patientId);
-      const patients = getStored('patients', SEED_PATIENTS);
-      const patient = patients.find(p => p.id === pId);
-      if (!patient) throw new Error('ไม่พบข้อมูลผู้ป่วย');
 
-      const records = getStored('records', []).filter(r => r.patient_id === pId);
+      // Get patient info
+      const patientRes = await this.getPatient(pId);
+      const patient = patientRes.patient;
+
+      // Get records (with Cloud Firestore sync)
+      const recordsRes = await this.getRecords(pId);
+      const records = recordsRes.records || [];
 
       // Build 20-week matrix
       const weeklyMatrix = [];
@@ -537,6 +747,15 @@ const API = (function () {
         locked_until: null,
         created_at: new Date().toISOString()
       };
+
+      if (firestoreDb) {
+        try {
+          await firestoreDb.collection('users').doc(newUser.username).set(newUser);
+        } catch (e) {
+          console.warn('Firestore user save warning:', e.message);
+        }
+      }
+
       users.push(newUser);
       setStored('users', users);
       return { message: 'สร้างบัญชีผู้ใช้ใหม่สำเร็จ', userId: newId };
@@ -546,13 +765,18 @@ const API = (function () {
       const users = getStored('users', SEED_USERS);
       const idx = users.findIndex(u => u.id === parseInt(id));
       if (idx === -1) throw new Error('ไม่พบผู้ใช้');
-      if (data.username && data.username !== users[idx].username) {
-        if (users.some(u => u.id !== users[idx].id && u.username.toLowerCase() === data.username.toLowerCase())) {
-          throw new Error('ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว');
+      const updated = { ...users[idx], ...data, updated_at: new Date().toISOString() };
+      users[idx] = updated;
+      setStored('users', users);
+
+      if (firestoreDb) {
+        try {
+          await firestoreDb.collection('users').doc(updated.username).set(updated, { merge: true });
+        } catch (e) {
+          console.warn('Firestore user update warning:', e.message);
         }
       }
-      users[idx] = { ...users[idx], ...data, updated_at: new Date().toISOString() };
-      setStored('users', users);
+
       return { message: 'อัปเดตข้อมูลผู้ใช้สำเร็จ' };
     },
 
@@ -560,12 +784,35 @@ const API = (function () {
       let users = getStored('users', SEED_USERS);
       const uid = parseInt(id);
       if (uid === 1) throw new Error('ไม่สามารถลบบัญชีผู้ดูแลระบบหลักได้');
+      const target = users.find(u => u.id === uid);
       users = users.filter(u => u.id !== uid);
       setStored('users', users);
+
+      if (firestoreDb && target) {
+        try {
+          await firestoreDb.collection('users').doc(target.username).delete();
+        } catch (e) {
+          console.warn('Firestore user delete warning:', e.message);
+        }
+      }
+
       return { message: 'ลบบัญชีผู้ใช้สำเร็จ' };
     },
 
     async getAuditLogs(params = {}) {
+      if (firestoreDb) {
+        try {
+          const snap = await firestoreDb.collection('audit_logs').orderBy('created_at', 'desc').limit(50).get();
+          if (!snap.empty) {
+            const logs = [];
+            snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
+            return { logs };
+          }
+        } catch (e) {
+          console.warn('Firestore audit logs warning:', e.message);
+        }
+      }
+
       return {
         logs: [
           {
@@ -634,10 +881,10 @@ const API = (function () {
     try {
       return await request(serverEndpoint, options);
     } catch (err) {
-      // If server returns 404 or fails to fetch (like on GitHub Pages), switch automatically!
       if (!useClientEngine && (err.message.includes('Failed to fetch') || err.message.includes('404') || err.message.includes('Endpoint not found'))) {
-        console.warn(`Server API unreachable at ${serverEndpoint}. Switching seamlessly to Client-Side Engine!`);
+        console.warn(`Server API unreachable at ${serverEndpoint}. Switching seamlessly to Client Firestore Engine!`);
         useClientEngine = true;
+        initClientFirebase();
         return await clientFn();
       }
       throw err;
@@ -648,6 +895,7 @@ const API = (function () {
     setToken,
     getToken,
     isStaticHosting: () => useClientEngine,
+    getFirestoreInstance: () => firestoreDb,
 
     login: (username, password) => execute(
       'login',

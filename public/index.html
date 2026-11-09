@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="css/style.css">
   <!-- Local Standalone Chart.js (Fast, 100% Offline, Zero Latency) -->
   <script src="js/chart.umd.js"></script>
+  <!-- Google Firebase Web SDK for Direct Cloud Firestore Sync -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -22,6 +25,11 @@
         <div style="font-size: 0.7rem; color: var(--slate-500); font-weight: normal; line-height: 1.1;">
           ระบบติดตามการเข้าสู่ภาวะสงบของเบาหวาน (20 สัปดาห์)
         </div>
+      </div>
+      <!-- Cloud Firestore Live Indicator Pill -->
+      <div id="cloud-status-pill" style="margin-left: 0.85rem; font-size: 0.72rem; padding: 0.25rem 0.65rem; border-radius: 9999px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500;" title="สถานะการเชื่อมต่อกับ Google Cloud Firestore">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+        <span id="cloud-status-text">Cloud Firestore: ออนไลน์</span>
       </div>
     </div>
 

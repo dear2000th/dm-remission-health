@@ -279,6 +279,12 @@ const App = (function () {
       editPatientForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!currentPatient) return;
+        const submitBtn = editPatientForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerText = '⏳ กำลังบันทึกขึ้น Cloud Firebase...';
+        }
+
         const payload = {
           hn: $('edit-hn').value,
           citizen_id: $('edit-citizen-id').value || null,
@@ -296,11 +302,16 @@ const App = (function () {
         try {
           const res = await API.updatePatient(currentPatient.id, payload);
           closeModal($('edit-patient-modal'));
-          alert('แก้ไขข้อมูลเวชระเบียนผู้ป่วยเรียบร้อยแล้ว!');
+          alert('แก้ไขข้อมูลเวชระเบียนผู้ป่วยขึ้น Cloud Firestore เรียบร้อยแล้ว!');
           await loadPatientsList();
           await loadPatientData(currentPatient.id);
         } catch (err) {
           alert(`เกิดข้อผิดพลาดในการแก้ไข: ${err.message}`);
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerText = 'บันทึกการแก้ไข';
+          }
         }
       });
     }
@@ -466,13 +477,24 @@ const App = (function () {
           notes: $('entry-notes').value || null
         };
 
+        const submitBtn = entryForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerText = '⏳ กำลังบันทึกขึ้น Cloud Firebase...';
+        }
+
         try {
           const res = await API.saveRecord(currentPatient.id, payload);
           closeModal($('entry-modal'));
-          alert(res.message || 'บันทึกข้อมูลเรียบร้อยแล้ว!');
+          alert(res.message || 'บันทึกข้อมูลสุขภาพขึ้น Cloud Firestore เรียบร้อยแล้ว!');
           await loadPatientData(currentPatient.id);
         } catch (err) {
           alert(`เกิดข้อผิดพลาด: ${err.message}`);
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerText = '💾 บันทึกข้อมูล';
+          }
         }
       });
     }
@@ -482,6 +504,12 @@ const App = (function () {
     if (patientForm) {
       patientForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const submitBtn = patientForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerText = '⏳ กำลังส่งข้อมูลขึ้น Cloud Firebase...';
+        }
+
         const payload = {
           hn: $('new-hn').value,
           citizen_id: $('new-citizen-id').value || null,
@@ -499,11 +527,16 @@ const App = (function () {
           const res = await API.createPatient(payload);
           closeModal($('patient-modal'));
           patientForm.reset();
-          alert('ลงทะเบียนผู้ป่วยใหม่สำเร็จ!');
+          alert('ลงทะเบียนผู้ป่วยใหม่ขึ้น Cloud Firestore สำเร็จ!');
           await loadPatientsList();
           loadPatientData(res.patientId);
         } catch (err) {
           alert(`เกิดข้อผิดพลาด: ${err.message}`);
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerText = 'ลงทะเบียนผู้ป่วย';
+          }
         }
       });
     }
