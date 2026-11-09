@@ -53,24 +53,22 @@ router.get('/', verifyToken, (req, res) => {
   res.json({ patients });
 });
 
-// GET /api/patients/:id - Patient details
+// GET /api/patients/:id - Patient detail
 router.get('/:id', verifyToken, checkPatientAccess, (req, res) => {
   const patientId = parseInt(req.params.id);
   const patient = db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
 
   if (!patient) {
-    return res.status(404).json({ error: 'ไม่พบข้อมูลผู้ป่วย' });
+    return res.status(404).json({ error: 'ไม่พบผู้ป่วย' });
   }
 
-  // Summary statistics
+  // Get recording stats
   const stats = db.prepare(`
     SELECT
-      COUNT(id) as total_days_logged,
-      COUNT(DISTINCT week_number) as active_weeks,
-      AVG(bp_systolic) as avg_bp_sys,
-      AVG(bp_diastolic) as avg_bp_dia,
-      AVG(glucose_first_meal_pre) as avg_fbs,
-      AVG(step_count) as avg_steps
+      COUNT(DISTINCT week_number) as total_weeks_recorded,
+      COUNT(id) as total_days_recorded,
+      MIN(record_date) as first_log_date,
+      MAX(record_date) as last_log_date
     FROM health_records
     WHERE patient_id = ?
   `).get(patientId);
@@ -127,7 +125,7 @@ router.post('/', verifyToken, requireRole(['admin', 'doctor', 'nurse']), (req, r
     cleanCitizenId = `${digitsOnly[0]}-${digitsOnly.slice(1, 5)}-${digitsOnly.slice(5, 10)}-${digitsOnly.slice(10, 12)}-${digitsOnly[12]}`;
 
     // Check unique Citizen ID
-    const existingCid = db.prepare('SELECT id FROM patients WHERE citizen_id = ? OR REPLACE(citizen_id, "-", "") = ?').get(cleanCitizenId, digitsOnly);
+    const existingCid = db.prepare("SELECT id FROM patients WHERE citizen_id = ? OR REPLACE(citizen_id, '-', '') = ?").get(cleanCitizenId, digitsOnly);
     if (existingCid) {
       return res.status(409).json({ error: 'เลขประจำตัวประชาชนนี้มีอยู่ในระบบแล้ว' });
     }
@@ -175,7 +173,7 @@ router.post('/', verifyToken, requireRole(['admin', 'doctor', 'nurse']), (req, r
   });
 });
 
-// PUT /api/patients/:id - Update patient (including citizen_id)
+// PUT /api/patients/:id - Update all patient info (HN, Citizen ID, Name, Gender, Age, Weights, HbA1c, etc.)
 router.put('/:id', verifyToken, requireRole(['admin', 'doctor', 'nurse']), (req, res) => {
   const patientId = parseInt(req.params.id);
   const patient = db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
@@ -185,14 +183,31 @@ router.put('/:id', verifyToken, requireRole(['admin', 'doctor', 'nurse']), (req,
   }
 
   const {
+    hn,
     citizen_id,
     full_name,
+    gender,
+    birth_date,
     age,
+    initial_weight_kg,
     target_weight_kg,
+    initial_hba1c,
+    program_start_date,
     status,
     notes
   } = req.body;
 
+  // Check unique HN if changing
+  let cleanHn = patient.hn;
+  if (hn && hn.trim() && hn.trim() !== patient.hn) {
+    const existingHn = db.prepare('SELECT id FROM patients WHERE hn = ? AND id != ?').get(hn.trim(), patientId);
+    if (existingHn) {
+      return res.status(409).json({ error: 'รหัส HN นี้ถูกใช้งานโดยผู้ป่วยรายอื่นแล้ว' });
+    }
+    cleanHn = hn.trim();
+  }
+
+  // Citizen ID validation
   let cleanCitizenId = patient.citizen_id;
   if (citizen_id !== undefined && citizen_id !== null) {
     const rawCid = String(citizen_id).trim();
@@ -206,7 +221,7 @@ router.put('/:id', verifyToken, requireRole(['admin', 'doctor', 'nurse']), (req,
       cleanCitizenId = `${digitsOnly[0]}-${digitsOnly.slice(1, 5)}-${digitsOnly.slice(5, 10)}-${digitsOnly.slice(10, 12)}-${digitsOnly[12]}`;
 
       // Check duplicate
-      const duplicate = db.prepare('SELECT id FROM patients WHERE (citizen_id = ? OR REPLACE(citizen_id, "-", "") = ?) AND id != ?').get(cleanCitizenId, digitsOnly, patientId);
+      const duplicate = db.prepare("SELECT id FROM patients WHERE (citizen_id = ? OR REPLACE(citizen_id, '-', '') = ?) AND id != ?").get(cleanCitizenId, digitsOnly, patientId);
       if (duplicate) {
         return res.status(409).json({ error: 'เลขประจำตัวประชาชนนี้มีอยู่ในระบบแล้ว' });
       }
@@ -215,21 +230,33 @@ router.put('/:id', verifyToken, requireRole(['admin', 'doctor', 'nurse']), (req,
 
   db.prepare(`
     UPDATE patients
-    SET citizen_id = ?,
+    SET hn = COALESCE(?, hn),
+        citizen_id = ?,
         full_name = COALESCE(?, full_name),
+        gender = COALESCE(?, gender),
+        birth_date = COALESCE(?, birth_date),
         age = COALESCE(?, age),
+        initial_weight_kg = COALESCE(?, initial_weight_kg),
         target_weight_kg = COALESCE(?, target_weight_kg),
+        initial_hba1c = COALESCE(?, initial_hba1c),
+        program_start_date = COALESCE(?, program_start_date),
         status = COALESCE(?, status),
         notes = COALESCE(?, notes),
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
+    cleanHn,
     cleanCitizenId,
     full_name ? full_name.trim() : null,
-    age ? parseInt(age) : null,
-    target_weight_kg ? parseFloat(target_weight_kg) : null,
+    gender || null,
+    birth_date || null,
+    age !== undefined && age !== '' ? parseInt(age) : null,
+    initial_weight_kg !== undefined && initial_weight_kg !== '' ? parseFloat(initial_weight_kg) : null,
+    target_weight_kg !== undefined && target_weight_kg !== '' ? parseFloat(target_weight_kg) : null,
+    initial_hba1c !== undefined && initial_hba1c !== '' ? parseFloat(initial_hba1c) : null,
+    program_start_date || null,
     status || null,
-    notes || null,
+    notes !== undefined ? notes : null,
     patientId
   );
 
@@ -239,13 +266,49 @@ router.put('/:id', verifyToken, requireRole(['admin', 'doctor', 'nurse']), (req,
     role: req.user.role,
     action: 'UPDATE_PATIENT',
     resource: `/api/patients/${patientId}`,
-    patientHn: patient.hn,
+    patientHn: cleanHn,
     ipAddress: req.ip,
     userAgent: req.headers['user-agent'],
     details: req.body
   });
 
   res.json({ message: 'ปรับปรุงข้อมูลผู้ป่วยเรียบร้อยแล้ว' });
+});
+
+// DELETE /api/patients/:id - Delete patient and all their health records
+router.delete('/:id', verifyToken, requireRole(['admin', 'doctor']), (req, res) => {
+  const patientId = parseInt(req.params.id);
+  const patient = db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
+
+  if (!patient) {
+    return res.status(404).json({ error: 'ไม่พบผู้ป่วย' });
+  }
+
+  // Delete all health records for this patient
+  const recInfo = db.prepare('DELETE FROM health_records WHERE patient_id = ?').run(patientId);
+
+  // Delete patient
+  db.prepare('DELETE FROM patients WHERE id = ?').run(patientId);
+
+  logAudit({
+    userId: req.user.id,
+    username: req.user.username,
+    role: req.user.role,
+    action: 'DELETE_PATIENT',
+    resource: `/api/patients/${patientId}`,
+    patientHn: patient.hn,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'],
+    details: {
+      full_name: patient.full_name,
+      citizen_id: patient.citizen_id,
+      deleted_records_count: recInfo.changes
+    }
+  });
+
+  res.json({
+    message: `ลบข้อมูลผู้ป่วย ${patient.full_name} (${patient.hn}) และประวัติบันทึกสุขภาพ ${recInfo.changes} รายการเรียบร้อยแล้ว`
+  });
 });
 
 module.exports = router;

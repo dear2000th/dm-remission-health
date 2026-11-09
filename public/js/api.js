@@ -287,6 +287,22 @@ const API = (function () {
       return { message: 'แก้ไขข้อมูลผู้ป่วยสำเร็จ' };
     },
 
+    async deletePatient(id) {
+      const pId = parseInt(id);
+      let patients = getStored('patients', SEED_PATIENTS);
+      const target = patients.find(p => p.id === pId);
+      if (!target) throw new Error('ไม่พบข้อมูลผู้ป่วย');
+      patients = patients.filter(p => p.id !== pId);
+      setStored('patients', patients);
+
+      // Also delete all records for this patient
+      let records = getStored('records', []);
+      records = records.filter(r => r.patient_id !== pId);
+      setStored('records', records);
+
+      return { message: `ลบข้อมูลผู้ป่วย ${target.full_name} (${target.hn}) เรียบร้อยแล้ว` };
+    },
+
     async getRecords(patientId, week = null) {
       const pId = parseInt(patientId);
       const records = getStored('records', []);
@@ -677,6 +693,13 @@ const API = (function () {
       () => ClientEngine.updatePatient(id, data),
       `/api/patients/${id}`,
       { method: 'PUT', body: JSON.stringify(data) }
+    ),
+
+    deletePatient: (id) => execute(
+      'deletePatient',
+      () => ClientEngine.deletePatient(id),
+      `/api/patients/${id}`,
+      { method: 'DELETE' }
     ),
 
     getRecords: (patientId, week = null) => execute(

@@ -251,6 +251,101 @@ const App = (function () {
       });
     }
 
+    // Edit Patient Listeners
+    const btnOpenEditPatient = $('btn-open-edit-patient');
+    if (btnOpenEditPatient) {
+      btnOpenEditPatient.addEventListener('click', () => {
+        if (!currentPatient) {
+          alert('กรุณาเลือกผู้ป่วยก่อน');
+          return;
+        }
+        $('edit-hn').value = currentPatient.hn || '';
+        $('edit-citizen-id').value = currentPatient.citizen_id || '';
+        $('edit-name').value = currentPatient.full_name || '';
+        $('edit-gender').value = currentPatient.gender || 'M';
+        $('edit-age').value = currentPatient.age || '';
+        $('edit-weight').value = currentPatient.initial_weight_kg || '';
+        $('edit-target-weight').value = currentPatient.target_weight_kg || '';
+        $('edit-hba1c').value = currentPatient.initial_hba1c || '';
+        $('edit-start-date').value = currentPatient.program_start_date || '';
+        $('edit-status').value = currentPatient.status || 'active';
+        $('edit-notes').value = currentPatient.notes || '';
+        openModal($('edit-patient-modal'));
+      });
+    }
+
+    const editPatientForm = $('edit-patient-form');
+    if (editPatientForm) {
+      editPatientForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!currentPatient) return;
+        const payload = {
+          hn: $('edit-hn').value,
+          citizen_id: $('edit-citizen-id').value || null,
+          full_name: $('edit-name').value,
+          gender: $('edit-gender').value,
+          age: $('edit-age').value,
+          initial_weight_kg: $('edit-weight').value,
+          target_weight_kg: $('edit-target-weight').value,
+          initial_hba1c: $('edit-hba1c').value,
+          program_start_date: $('edit-start-date').value,
+          status: $('edit-status').value,
+          notes: $('edit-notes').value
+        };
+
+        try {
+          const res = await API.updatePatient(currentPatient.id, payload);
+          closeModal($('edit-patient-modal'));
+          alert('แก้ไขข้อมูลเวชระเบียนผู้ป่วยเรียบร้อยแล้ว!');
+          await loadPatientsList();
+          await loadPatientData(currentPatient.id);
+        } catch (err) {
+          alert(`เกิดข้อผิดพลาดในการแก้ไข: ${err.message}`);
+        }
+      });
+    }
+
+    // Delete Patient Listeners
+    const btnOpenDeletePatient = $('btn-open-delete-patient');
+    if (btnOpenDeletePatient) {
+      btnOpenDeletePatient.addEventListener('click', () => {
+        if (!currentPatient) {
+          alert('กรุณาเลือกผู้ป่วยก่อน');
+          return;
+        }
+        $('delete-patient-name').innerText = currentPatient.full_name;
+        $('delete-patient-hn').innerText = currentPatient.hn;
+        $('delete-patient-cid').innerText = currentPatient.citizen_id || 'ไม่ระบุ';
+        openModal($('delete-patient-modal'));
+      });
+    }
+
+    const btnConfirmDeletePatient = $('btn-confirm-delete-patient');
+    if (btnConfirmDeletePatient) {
+      btnConfirmDeletePatient.addEventListener('click', async () => {
+        if (!currentPatient) return;
+        try {
+          btnConfirmDeletePatient.disabled = true;
+          const res = await API.deletePatient(currentPatient.id);
+          closeModal($('delete-patient-modal'));
+          alert(res.message || 'ลบข้อมูลผู้ป่วยเรียบร้อยแล้ว');
+          await loadPatientsList();
+          if (patientsList.length > 0) {
+            await loadPatientData(patientsList[0].id);
+          } else {
+            currentPatient = null;
+            $('patient-name').innerText = 'ไม่พบข้อมูลผู้ป่วย';
+            $('patient-hn').innerText = '-';
+            $('patient-meta').innerHTML = '';
+          }
+        } catch (err) {
+          alert(`เกิดข้อผิดพลาดในการลบ: ${err.message}`);
+        } finally {
+          btnConfirmDeletePatient.disabled = false;
+        }
+      });
+    }
+
     const btnPrintReport = $('btn-print-report');
     if (btnPrintReport) {
       btnPrintReport.addEventListener('click', () => {
@@ -451,21 +546,24 @@ const App = (function () {
     $('user-role-tag').className = `role-tag ${currentUser.role}`;
 
     // Role-based visibility
+    const canManagePatients = currentUser.role === 'admin' || currentUser.role === 'doctor';
+    if ($('btn-new-patient')) $('btn-new-patient').style.display = canManagePatients ? 'inline-flex' : 'none';
+    if ($('btn-open-edit-patient')) $('btn-open-edit-patient').style.display = canManagePatients ? 'inline-flex' : 'none';
+    if ($('btn-open-delete-patient')) $('btn-open-delete-patient').style.display = canManagePatients ? 'inline-flex' : 'none';
+    if ($('btn-open-reset')) $('btn-open-reset').style.display = canManagePatients ? 'inline-flex' : 'none';
+
     if (currentUser.role === 'admin') {
-      $('btn-new-patient').style.display = 'inline-flex';
       $('tab-users-btn').style.display = 'inline-flex';
       $('tab-audit-btn').style.display = 'inline-flex';
       $('patient-select').style.display = 'inline-block';
       $('search-box-wrap').style.display = 'block';
     } else if (currentUser.role === 'doctor' || currentUser.role === 'nurse') {
-      $('btn-new-patient').style.display = 'inline-flex';
       $('tab-users-btn').style.display = 'none';
       $('tab-audit-btn').style.display = 'inline-flex';
       $('patient-select').style.display = 'inline-block';
       $('search-box-wrap').style.display = 'block';
     } else {
       // Patient
-      $('btn-new-patient').style.display = 'none';
       $('tab-users-btn').style.display = 'none';
       $('tab-audit-btn').style.display = 'none';
       $('patient-select').style.display = 'none';

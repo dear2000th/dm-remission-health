@@ -185,11 +185,17 @@
         </div>
       </div>
       <div class="patient-actions">
-        <button id="btn-open-entry" class="btn btn-primary">
+        <button id="btn-open-entry" class="btn btn-primary" title="บันทึกค่าน้ำตาลและความดันประจำวัน">
           📝 บันทึกข้อมูลผู้ป่วย
         </button>
-        <button id="btn-open-reset" class="btn btn-outline btn-sm" style="color: var(--danger); border-color: var(--slate-300);" title="ล้างข้อมูลเหมือนปุ่มใน Excel">
-          🗑️ ล้างข้อมูลบล็อก
+        <button id="btn-open-edit-patient" class="btn btn-outline" style="border-color: var(--teal-600); color: var(--teal-700);" title="แก้ไขข้อมูลเวชระเบียนผู้ป่วย">
+          ✏️ แก้ไขข้อมูลผู้ป่วย
+        </button>
+        <button id="btn-open-delete-patient" class="btn btn-outline" style="border-color: var(--danger); color: var(--danger);" title="ลบข้อมูลผู้ป่วยและประวัติสุขภาพ">
+          🗑️ ลบผู้ป่วย
+        </button>
+        <button id="btn-open-reset" class="btn btn-outline btn-sm" style="color: var(--slate-600); border-color: var(--slate-300);" title="ล้างข้อมูลเหมือนปุ่มใน Excel">
+          🔄 ล้างบล็อกตาราง
         </button>
       </div>
     </div>
@@ -607,6 +613,122 @@
           <button type="submit" class="btn btn-teal">ลงทะเบียนผู้ป่วย</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal 2.1: Edit Patient Modal -->
+  <div class="modal-overlay" id="edit-patient-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">✏️ แก้ไขข้อมูลเวชระเบียนผู้ป่วย</h3>
+        <button class="close-btn" data-close-modal="edit-patient-modal">&times;</button>
+      </div>
+
+      <form id="edit-patient-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="edit-hn">รหัสประจำตัวผู้ป่วย (HN) *</label>
+            <input type="text" id="edit-hn" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-citizen-id">เลขประจำตัวประชาชน (13 หลัก)</label>
+            <input type="text" id="edit-citizen-id" class="form-control" placeholder="เช่น 1-1002-00123-45-6" maxlength="17">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit-name">ชื่อ - นามสกุล *</label>
+          <input type="text" id="edit-name" class="form-control" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="edit-gender">เพศ</label>
+            <select id="edit-gender" class="form-control">
+              <option value="M">ชาย (Male)</option>
+              <option value="F">หญิง (Female)</option>
+              <option value="Other">อื่นๆ</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-age">อายุ (ปี)</label>
+            <input type="number" id="edit-age" class="form-control" min="1" max="120">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="edit-weight">น้ำหนักเริ่มต้น (กก.)</label>
+            <input type="number" step="0.1" id="edit-weight" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-target-weight">เป้าหมายน้ำหนัก (กก.)</label>
+            <input type="number" step="0.1" id="edit-target-weight" class="form-control">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="edit-hba1c">HbA1c เริ่มต้น (%)</label>
+            <input type="number" step="0.1" id="edit-hba1c" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-start-date">วันที่เริ่มโปรแกรม *</label>
+            <input type="date" id="edit-start-date" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit-status">สถานะโครงการ</label>
+          <select id="edit-status" class="form-control">
+            <option value="active">กำลังติดตาม (Active)</option>
+            <option value="completed">สิ้นสุดโปรแกรม / เข้าสู่ภาวะสงบแล้ว (Completed / Remission)</option>
+            <option value="referred">ส่งต่อแพทย์เฉพาะทาง (Referred)</option>
+            <option value="inactive">ระงับชั่วคราว (Inactive)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit-notes">แผนการดูแลรักษา / ยาลดเบาหวานที่ใช้</label>
+          <textarea id="edit-notes" class="form-control" rows="2"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1.25rem;">
+          <button type="button" class="btn btn-outline" data-close-modal="edit-patient-modal">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary">บันทึกการแก้ไข</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2.2: Delete Patient Modal -->
+  <div class="modal-overlay" id="delete-patient-modal">
+    <div class="modal-box" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="color: var(--danger);">🗑️ ยืนยันการลบข้อมูลผู้ป่วย</h3>
+        <button class="close-btn" data-close-modal="delete-patient-modal">&times;</button>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <p style="font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--slate-800);">
+          คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลผู้ป่วยรายนี้ออกจากระบบ?
+        </p>
+        <div style="background: var(--slate-100); padding: 0.85rem; border-radius: var(--radius-sm); margin-bottom: 0.85rem; border-left: 4px solid var(--danger);">
+          <strong id="delete-patient-name" style="color: var(--slate-900); font-size: 1.05rem;">-</strong><br>
+          <div style="color: var(--slate-600); font-size: 0.85rem; margin-top: 0.25rem;">
+            <span>HN: <strong id="delete-patient-hn">-</strong></span> |
+            <span>เลขบัตร ปชช.: <span id="delete-patient-cid">-</span></span>
+          </div>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--danger); line-height: 1.4;">
+          ⚠️ <strong>คำเตือน:</strong> การลบข้อมูลผู้ป่วยจะทำการลบประวัติการตรวจสุขภาพ 20 สัปดาห์ทั้งหมดของผู้ป่วยรายนี้อย่างถาวร ไม่สามารถย้อนกลับได้ และการกระทำนี้จะถูกบันทึกลงใน Security Audit Trail
+        </p>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.65rem;">
+        <button type="button" class="btn btn-outline" data-close-modal="delete-patient-modal">ยกเลิก</button>
+        <button type="button" id="btn-confirm-delete-patient" class="btn btn-danger">ยืนยันการลบผู้ป่วยรายนี้</button>
+      </div>
     </div>
   </div>
 

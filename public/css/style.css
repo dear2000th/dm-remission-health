@@ -346,6 +346,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.65rem;
+  flex-wrap: wrap;
 }
 
 /* 6. Executive KPI Metrics Grid */
