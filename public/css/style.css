@@ -1240,3 +1240,22 @@ footer, .executive-footer {
     max-width: 100%;
   }
 }
+
+/* Instant Record Update Animation */
+@keyframes rowHighlightPulse {
+  0% {
+    background-color: rgba(16, 185, 129, 0.38);
+  }
+  30% {
+    background-color: rgba(16, 185, 129, 0.22);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.row-just-saved {
+  animation: rowHighlightPulse 3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 600;
+}
+

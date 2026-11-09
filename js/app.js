@@ -80,6 +80,8 @@ const App = (function () {
   let usersList = [];
   let userToDelete = null;
   let searchDebounceTimer = null;
+  let lastEditedWeek = null;
+  let lastEditedDay = null;
 
   // Helper selectors
   const $ = (id) => document.getElementById(id);
@@ -324,6 +326,19 @@ const App = (function () {
       });
     }
 
+    // Dynamic Form Pre-fill on Modal Dropdown Change
+    const entryWeekSelect = $('entry-week');
+    const entryDaySelect = $('entry-day');
+    if (entryWeekSelect && entryDaySelect) {
+      const handleEntrySelectChange = () => {
+        const w = parseInt(entryWeekSelect.value) || 1;
+        const d = parseInt(entryDaySelect.value) || 1;
+        populateModalWithExistingRecord(w, d);
+      };
+      entryWeekSelect.addEventListener('change', handleEntrySelectChange);
+      entryDaySelect.addEventListener('change', handleEntrySelectChange);
+    }
+
     // Edit Patient Listeners
     const btnOpenEditPatient = $('btn-open-edit-patient');
     if (btnOpenEditPatient) {
@@ -536,9 +551,14 @@ const App = (function () {
           return;
         }
 
+        const weekVal = parseInt($('entry-week').value) || 1;
+        const dayVal = parseInt($('entry-day').value) || 1;
+        lastEditedWeek = weekVal;
+        lastEditedDay = dayVal;
+
         const payload = {
-          week_number: parseInt($('entry-week').value),
-          day_of_week: parseInt($('entry-day').value),
+          week_number: weekVal,
+          day_of_week: dayVal,
           record_date: $('entry-date').value || null,
           bp_systolic: $('entry-sys').value || null,
           bp_diastolic: $('entry-dia').value || null,
@@ -553,13 +573,13 @@ const App = (function () {
         const submitBtn = entryForm.querySelector('button[type="submit"]');
         if (submitBtn) {
           submitBtn.disabled = true;
-          submitBtn.innerText = '⏳ กำลังบันทึกขึ้น Cloud Firebase...';
+          submitBtn.innerText = '⏳ กำลังบันทึกข้อมูล...';
         }
 
         try {
           const res = await API.saveRecord(currentPatient.id, payload);
           closeModal($('entry-modal'));
-          Toast.success('บันทึกข้อมูลสุขภาพสำเร็จ', res.message || 'บันทึกข้อมูลสุขภาพขึ้น Cloud Firestore เรียบร้อยแล้ว!');
+          Toast.success('บันทึกข้อมูลสุขภาพสำเร็จ', `บันทึกข้อมูลสุขภาพ สัปดาห์ที่ ${weekVal} วันที่ ${dayVal} เรียบร้อยแล้ว!`);
           await loadPatientData(currentPatient.id);
         } catch (err) {
           Toast.error('เกิดข้อผิดพลาด', err.message);
@@ -850,7 +870,13 @@ const App = (function () {
 
       renderPatientBar();
       renderKPICards();
-      renderCharts();
+
+      try {
+        renderCharts();
+      } catch (chartErr) {
+        console.warn('Charts render deferred:', chartErr);
+      }
+
       renderDailyBlocks();
       renderSummaryMatrix();
     } catch (err) {
@@ -935,6 +961,22 @@ const App = (function () {
   // Renders the 20-week daily block structure (Compact, Professional, Zero Overflow)
   function renderDailyBlocks() {
     const container = $('blocks-container');
+    if (!container) return;
+
+    // Detect which weeks were open before re-render
+    const previouslyOpenWeeks = new Set();
+    container.querySelectorAll('.week-header.open').forEach(hdr => {
+      const w = parseInt(hdr.getAttribute('data-toggle-week'));
+      if (w) previouslyOpenWeeks.add(w);
+    });
+
+    if (lastEditedWeek) {
+      previouslyOpenWeeks.add(lastEditedWeek);
+    }
+    if (previouslyOpenWeeks.size === 0) {
+      previouslyOpenWeeks.add(1);
+    }
+
     container.innerHTML = '';
     const { weeklyMatrix } = currentAnalytics;
 
@@ -942,7 +984,7 @@ const App = (function () {
       const card = document.createElement('div');
       card.className = 'week-accordion';
 
-      const isOpen = wm.week_number === 1 || wm.days_logged > 0;
+      const isOpen = previouslyOpenWeeks.has(wm.week_number) || (wm.days_logged > 0 && previouslyOpenWeeks.size === 0);
 
       card.innerHTML = `
         <div class="week-header ${isOpen ? 'open' : ''}" data-toggle-week="${wm.week_number}">
@@ -974,13 +1016,25 @@ const App = (function () {
               <tbody>
                 ${[1, 2, 3, 4, 5, 6, 7].map(day => {
                   const d = wm.days[day] || {};
-                  const bpStr = (d.bp_systolic && d.bp_diastolic) ? `${d.bp_systolic} / ${d.bp_diastolic}` : '-';
-                  const g1Str = (d.glucose_first_meal_pre || d.glucose_first_meal_post) ? `${d.glucose_first_meal_pre || '-'} / ${d.glucose_first_meal_post || '-'}` : '-';
-                  const g2Str = (d.glucose_last_meal_pre || d.glucose_last_meal_post) ? `${d.glucose_last_meal_pre || '-'} / ${d.glucose_last_meal_post || '-'}` : '-';
-                  const stepsStr = d.step_count ? d.step_count.toLocaleString() : '-';
+                  const hasBp = (d.bp_systolic !== null && d.bp_systolic !== undefined && d.bp_systolic !== '') ||
+                                (d.bp_diastolic !== null && d.bp_diastolic !== undefined && d.bp_diastolic !== '');
+                  const bpStr = hasBp ? `${d.bp_systolic ?? '-'} / ${d.bp_diastolic ?? '-'}` : '-';
+
+                  const hasG1 = (d.glucose_first_meal_pre !== null && d.glucose_first_meal_pre !== undefined && d.glucose_first_meal_pre !== '') ||
+                                (d.glucose_first_meal_post !== null && d.glucose_first_meal_post !== undefined && d.glucose_first_meal_post !== '');
+                  const g1Str = hasG1 ? `${d.glucose_first_meal_pre ?? '-'} / ${d.glucose_first_meal_post ?? '-'}` : '-';
+
+                  const hasG2 = (d.glucose_last_meal_pre !== null && d.glucose_last_meal_pre !== undefined && d.glucose_last_meal_pre !== '') ||
+                                (d.glucose_last_meal_post !== null && d.glucose_last_meal_post !== undefined && d.glucose_last_meal_post !== '');
+                  const g2Str = hasG2 ? `${d.glucose_last_meal_pre ?? '-'} / ${d.glucose_last_meal_post ?? '-'}` : '-';
+
+                  const hasSteps = d.step_count !== null && d.step_count !== undefined && d.step_count !== '';
+                  const stepsStr = hasSteps ? Number(d.step_count).toLocaleString() : '-';
+
+                  const isJustEdited = (lastEditedWeek === wm.week_number && lastEditedDay === day);
 
                   return `
-                    <tr>
+                    <tr id="row-w${wm.week_number}-d${day}" class="${isJustEdited ? 'row-just-saved' : ''}">
                       <td><strong>วันที่ ${day}</strong></td>
                       <td>${bpStr}</td>
                       <td>${g1Str}</td>
@@ -996,10 +1050,10 @@ const App = (function () {
                 }).join('')}
                 <tr class="avg-row">
                   <td><strong>เฉลี่ย สัปดาห์ ${wm.week_number}</strong></td>
-                  <td><strong>${wm.averages.bp_systolic || '-' } / ${wm.averages.bp_diastolic || '-'}</strong></td>
-                  <td><strong>${wm.averages.glucose_first_meal_pre || '-'} / ${wm.averages.glucose_first_meal_post || '-'}</strong></td>
-                  <td><strong>${wm.averages.glucose_last_meal_pre || '-'} / ${wm.averages.glucose_last_meal_post || '-'}</strong></td>
-                  <td><strong>${wm.averages.step_count ? wm.averages.step_count.toLocaleString() : '-'}</strong></td>
+                  <td><strong>${(wm.averages.bp_systolic != null || wm.averages.bp_diastolic != null) ? `${wm.averages.bp_systolic ?? '-'} / ${wm.averages.bp_diastolic ?? '-'}` : '-'}</strong></td>
+                  <td><strong>${(wm.averages.glucose_first_meal_pre != null || wm.averages.glucose_first_meal_post != null) ? `${wm.averages.glucose_first_meal_pre ?? '-'} / ${wm.averages.glucose_first_meal_post ?? '-'}` : '-'}</strong></td>
+                  <td><strong>${(wm.averages.glucose_last_meal_pre != null || wm.averages.glucose_last_meal_post != null) ? `${wm.averages.glucose_last_meal_pre ?? '-'} / ${wm.averages.glucose_last_meal_post ?? '-'}` : '-'}</strong></td>
+                  <td><strong>${wm.averages.step_count ? Number(wm.averages.step_count).toLocaleString() : '-'}</strong></td>
                   <td><span class="badge badge-success">เฉลี่ย</span></td>
                 </tr>
               </tbody>
@@ -1031,6 +1085,16 @@ const App = (function () {
         openEntryModal(w, d);
       });
     });
+
+    // Gently scroll to the row that was just saved
+    if (lastEditedWeek && lastEditedDay) {
+      const targetRow = $(`row-w${lastEditedWeek}-d${lastEditedDay}`);
+      if (targetRow) {
+        setTimeout(() => {
+          targetRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 120);
+      }
+    }
   }
 
   // Renders the side-by-side 20-week Summary Table (Mirroring columns J to Q of Excel)
@@ -1098,11 +1162,7 @@ const App = (function () {
     }
   }
 
-  function openEntryModal(week = 1, day = 1) {
-    $('entry-week').value = week;
-    $('entry-day').value = day;
-
-    // Pre-fill existing data if present
+  function populateModalWithExistingRecord(week, day) {
     let rec = {};
     if (currentAnalytics && currentAnalytics.weeklyMatrix) {
       const wm = currentAnalytics.weeklyMatrix[week - 1];
@@ -1112,15 +1172,20 @@ const App = (function () {
     }
 
     $('entry-date').value = rec.record_date || new Date().toISOString().split('T')[0];
-    $('entry-sys').value = rec.bp_systolic || '';
-    $('entry-dia').value = rec.bp_diastolic || '';
-    $('entry-g1-pre').value = rec.glucose_first_meal_pre || '';
-    $('entry-g1-post').value = rec.glucose_first_meal_post || '';
-    $('entry-g2-pre').value = rec.glucose_last_meal_pre || '';
-    $('entry-g2-post').value = rec.glucose_last_meal_post || '';
-    $('entry-steps').value = rec.step_count || '';
+    $('entry-sys').value = (rec.bp_systolic !== null && rec.bp_systolic !== undefined) ? rec.bp_systolic : '';
+    $('entry-dia').value = (rec.bp_diastolic !== null && rec.bp_diastolic !== undefined) ? rec.bp_diastolic : '';
+    $('entry-g1-pre').value = (rec.glucose_first_meal_pre !== null && rec.glucose_first_meal_pre !== undefined) ? rec.glucose_first_meal_pre : '';
+    $('entry-g1-post').value = (rec.glucose_first_meal_post !== null && rec.glucose_first_meal_post !== undefined) ? rec.glucose_first_meal_post : '';
+    $('entry-g2-pre').value = (rec.glucose_last_meal_pre !== null && rec.glucose_last_meal_pre !== undefined) ? rec.glucose_last_meal_pre : '';
+    $('entry-g2-post').value = (rec.glucose_last_meal_post !== null && rec.glucose_last_meal_post !== undefined) ? rec.glucose_last_meal_post : '';
+    $('entry-steps').value = (rec.step_count !== null && rec.step_count !== undefined) ? rec.step_count : '';
     $('entry-notes').value = rec.notes || '';
+  }
 
+  function openEntryModal(week = 1, day = 1) {
+    $('entry-week').value = week;
+    $('entry-day').value = day;
+    populateModalWithExistingRecord(week, day);
     openModal($('entry-modal'));
   }
 

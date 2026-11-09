@@ -448,15 +448,32 @@ const API = (function () {
       const pId = parseInt(patientId);
       let records = getStored('records', []);
 
-      // Fetch from Cloud Firestore
+      // Fetch from Cloud Firestore and merge into local cache
       if (firestoreDb) {
         try {
           const snap = await firestoreDb.collection('patients').doc(String(pId)).collection('health_records').get();
           if (!snap.empty) {
-            const cloudRecs = [];
-            snap.forEach(doc => cloudRecs.push(doc.data()));
-            // Merge with local records
-            records = records.filter(r => r.patient_id !== pId).concat(cloudRecs);
+            snap.forEach(doc => {
+              const d = doc.data();
+              if (d && d.week_number && d.day_of_week) {
+                const cloudRec = {
+                  ...d,
+                  patient_id: pId,
+                  week_number: parseInt(d.week_number),
+                  day_of_week: parseInt(d.day_of_week)
+                };
+                const idx = records.findIndex(r =>
+                  Number(r.patient_id) === pId &&
+                  Number(r.week_number) === cloudRec.week_number &&
+                  Number(r.day_of_week) === cloudRec.day_of_week
+                );
+                if (idx !== -1) {
+                  records[idx] = { ...records[idx], ...cloudRec };
+                } else {
+                  records.push(cloudRec);
+                }
+              }
+            });
             setStored('records', records);
           }
         } catch (e) {
@@ -464,9 +481,9 @@ const API = (function () {
         }
       }
 
-      let filtered = records.filter(r => r.patient_id === pId);
+      let filtered = records.filter(r => Number(r.patient_id) === pId);
       if (week) {
-        filtered = filtered.filter(r => r.week_number === parseInt(week));
+        filtered = filtered.filter(r => Number(r.week_number) === parseInt(week));
       }
       return { records: filtered };
     },
@@ -478,27 +495,37 @@ const API = (function () {
       const dayNum = parseInt(data.day_of_week);
 
       const existingIdx = records.findIndex(r =>
-        r.patient_id === pId && r.week_number === weekNum && r.day_of_week === dayNum
+        Number(r.patient_id) === pId &&
+        Number(r.week_number) === weekNum &&
+        Number(r.day_of_week) === dayNum
       );
 
       const newRec = {
-        id: existingIdx !== -1 ? records[existingIdx].id : (records.length > 0 ? Math.max(...records.map(r => r.id)) + 1 : 1),
+        id: existingIdx !== -1 ? records[existingIdx].id : (records.length > 0 ? Math.max(...records.map(r => Number(r.id) || 0)) + 1 : Date.now()),
         patient_id: pId,
         week_number: weekNum,
         day_of_week: dayNum,
-        record_date: data.record_date,
-        bp_systolic: data.bp_systolic !== null && data.bp_systolic !== '' ? parseInt(data.bp_systolic) : null,
-        bp_diastolic: data.bp_diastolic !== null && data.bp_diastolic !== '' ? parseInt(data.bp_diastolic) : null,
-        glucose_first_meal_pre: data.glucose_first_meal_pre !== null && data.glucose_first_meal_pre !== '' ? parseInt(data.glucose_first_meal_pre) : null,
-        glucose_first_meal_post: data.glucose_first_meal_post !== null && data.glucose_first_meal_post !== '' ? parseInt(data.glucose_first_meal_post) : null,
-        glucose_last_meal_pre: data.glucose_last_meal_pre !== null && data.glucose_last_meal_pre !== '' ? parseInt(data.glucose_last_meal_pre) : null,
-        glucose_last_meal_post: data.glucose_last_meal_post !== null && data.glucose_last_meal_post !== '' ? parseInt(data.glucose_last_meal_post) : null,
-        step_count: data.step_count !== null && data.step_count !== '' ? parseInt(data.step_count) : null,
+        record_date: data.record_date || new Date().toISOString().split('T')[0],
+        bp_systolic: (data.bp_systolic !== null && data.bp_systolic !== '' && !isNaN(data.bp_systolic)) ? parseInt(data.bp_systolic) : null,
+        bp_diastolic: (data.bp_diastolic !== null && data.bp_diastolic !== '' && !isNaN(data.bp_diastolic)) ? parseInt(data.bp_diastolic) : null,
+        glucose_first_meal_pre: (data.glucose_first_meal_pre !== null && data.glucose_first_meal_pre !== '' && !isNaN(data.glucose_first_meal_pre)) ? parseInt(data.glucose_first_meal_pre) : null,
+        glucose_first_meal_post: (data.glucose_first_meal_post !== null && data.glucose_first_meal_post !== '' && !isNaN(data.glucose_first_meal_post)) ? parseInt(data.glucose_first_meal_post) : null,
+        glucose_last_meal_pre: (data.glucose_last_meal_pre !== null && data.glucose_last_meal_pre !== '' && !isNaN(data.glucose_last_meal_pre)) ? parseInt(data.glucose_last_meal_pre) : null,
+        glucose_last_meal_post: (data.glucose_last_meal_post !== null && data.glucose_last_meal_post !== '' && !isNaN(data.glucose_last_meal_post)) ? parseInt(data.glucose_last_meal_post) : null,
+        step_count: (data.step_count !== null && data.step_count !== '' && !isNaN(data.step_count)) ? parseInt(data.step_count) : null,
         notes: data.notes || '',
         updated_at: new Date().toISOString()
       };
 
-      // 1. Direct Save to Cloud Firestore
+      // 1. Immediately save to local storage cache so it reflects synchronously in UI
+      if (existingIdx !== -1) {
+        records[existingIdx] = newRec;
+      } else {
+        records.push(newRec);
+      }
+      setStored('records', records);
+
+      // 2. Direct Save to Cloud Firestore
       if (firestoreDb) {
         try {
           const docId = `w${weekNum}_d${dayNum}`;
@@ -521,16 +548,8 @@ const API = (function () {
         }
       }
 
-      // 2. Save to local storage cache
-      if (existingIdx !== -1) {
-        records[existingIdx] = newRec;
-      } else {
-        records.push(newRec);
-      }
-      setStored('records', records);
-
       return {
-        message: `บันทึกข้อมูลสุขภาพ สัปดาห์ที่ ${weekNum} วันที่ ${dayNum} ขึ้น Cloud Firestore เรียบร้อยแล้ว!`,
+        message: `บันทึกข้อมูลสุขภาพ สัปดาห์ที่ ${weekNum} วันที่ ${dayNum} เรียบร้อยแล้ว!`,
         data: newRec
       };
     },
@@ -610,10 +629,13 @@ const API = (function () {
       }
 
       records.forEach(rec => {
-        const wIdx = rec.week_number - 1;
-        if (wIdx >= 0 && wIdx < 20) {
-          weeklyMatrix[wIdx].days[rec.day_of_week] = rec;
-          weeklyMatrix[wIdx].days_logged++;
+        const wIdx = Number(rec.week_number) - 1;
+        const dIdx = Number(rec.day_of_week);
+        if (wIdx >= 0 && wIdx < 20 && dIdx >= 1 && dIdx <= 7) {
+          if (!weeklyMatrix[wIdx].days[dIdx]) {
+            weeklyMatrix[wIdx].days_logged++;
+          }
+          weeklyMatrix[wIdx].days[dIdx] = rec;
         }
       });
 
